@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
+import { useAuth } from '../context/AuthContext';
+import '../styles/tierboard.css';
 
 const TIERS = ['S', 'A', 'B', 'C'];
 const TIER_STYLES = {
-  S: 'bg-red-50 border-red-200',
-  A: 'bg-orange-50 border-orange-200',
-  B: 'bg-yellow-50 border-yellow-200',
-  C: 'bg-green-50 border-green-200',
+  S: 'tier-row--s',
+  A: 'tier-row--a',
+  B: 'tier-row--b',
+  C: 'tier-row--c',
 };
 
 // A draggable anime card. `containerId` just keeps dnd-kit ids unique
@@ -30,10 +32,10 @@ const Card = ({ anime, containerId }) => {
       style={style}
       {...listeners}
       {...attributes}
-      className="w-20 shrink-0 cursor-grab active:cursor-grabbing rounded-lg overflow-hidden bg-white border border-gray-200 shadow-sm"
+      className="tier-card"
     >
       <img src={anime.imageUrl} alt={anime.title} className="w-full h-24 object-cover" />
-      <p className="text-[10px] p-1 truncate">{anime.title}</p>
+      <p>{anime.title}</p>
     </div>
   );
 };
@@ -41,7 +43,7 @@ const Card = ({ anime, containerId }) => {
 const DropZone = ({ id, className, children }) => {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div ref={setNodeRef} className={`${className} ${isOver ? 'ring-2 ring-black/20' : ''}`}>
+    <div ref={setNodeRef} className={`${className} ${isOver ? 'ring-2 ring-amber-300/50' : ''}`}>
       {children}
     </div>
   );
@@ -54,8 +56,10 @@ const TierBoardPage = () => {
   const [tiers, setTiers] = useState({ S: [], A: [], B: [], C: [] });
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving'
   const [poolError, setPoolError] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
   const saveTimeout = useRef(null);
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
 
   // Every anime.id currently sitting in a tier -- used to hide already-placed
   // cards from the browse/search pool so they don't show up twice.
@@ -209,104 +213,162 @@ const TierBoardPage = () => {
   };
 
   const handleLogout = async () => {
+    await logout();
     navigate('/login');
   };
   const pool = mode === 'top' ? visibleTop : visibleSearch;
+  const displayName = user?.username || user?.email?.split('@')[0] || 'Profile';
+  const avatarLabel = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 
   return (
     <DndContext onDragEnd={handleDragEnd}>
-      <div className="max-w-5xl mx-auto mt-8 p-6">
-        <div className="flex items-center gap-2 mb-4 flex-wrap">
-          <h1 className="text-xl font-medium mr-auto">My anime tier list</h1>
-          <span className="text-xs text-gray-400">
-            {saveStatus === 'saving' ? 'Saving…' : 'Saved ✓'}
-          </span>
-          <input
-            type="text"
-            placeholder="Friend's email (optional)"
-            value={recipientsInput}
-            onChange={(e) => setRecipientsInput(e.target.value)}
-            className="border rounded-lg px-2 py-1.5 text-sm w-48"
-          />
-          <button
-            onClick={handleEmail}
-            disabled={emailStatus === 'sending'}
-            className="px-3 py-1.5 rounded-lg bg-black text-white text-sm disabled:opacity-50"
-          >
-            {emailStatus === 'sending' ? 'Sending…' : 'Email list'}
-          </button>
-          <button onClick={handleLogout} className="px-3 py-1.5 rounded-lg bg-black text-white text-sm">
-            logout
-          </button>
-        </div>
-
-        {TIERS.map((t) => (
-          <div key={t} className={`flex border-2 rounded-lg mb-3 ${TIER_STYLES[t]}`}>
-            <div className="w-12 flex items-center justify-center font-bold">{t}</div>
-            <DropZone id={`tier-${t}`} className="flex-1 flex flex-wrap gap-2 p-2 min-h-[110px]">
-              {tiers[t].map((anime) => (
-                <Card
-                  key={anime.animeId}
-                  anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl }}
-                  containerId={`tier-${t}`}
-                />
-              ))}
-            </DropZone>
+      <div className="tier-page">
+        <header className="tier-topbar">
+          <div className="tier-brand">
+            <div className="tier-brand-mark">◎</div>
+            <div className="tier-brand-copy">
+              <h1 className="tier-brand-title">My anime tier list</h1>
+              <p className="tier-brand-subtitle">Build, save, and share rankings with an anime-themed workspace.</p>
+            </div>
           </div>
-        ))}
 
-        <div className="mt-6 border-t pt-4">
-          <div className="flex gap-2 mb-3 flex-wrap">
+          <div className="tier-profile">
             <button
-              onClick={() => setMode('top')}
-              className={`px-3 py-1.5 rounded-lg text-sm ${mode === 'top' ? 'bg-black text-white' : 'bg-gray-100'}`}
+              type="button"
+              onClick={() => setProfileOpen((open) => !open)}
+              className="tier-profile-button"
+              aria-haspopup="menu"
+              aria-expanded={profileOpen}
             >
-              Top rated
+              <span className="tier-avatar">{avatarLabel || 'U'}</span>
+              <span className="tier-toggle-icon" aria-hidden="true">☰</span>
             </button>
-            <button
-              onClick={() => setMode('search')}
-              className={`px-3 py-1.5 rounded-lg text-sm ${mode === 'search' ? 'bg-black text-white' : 'bg-gray-100'}`}
-            >
-              Search
-            </button>
-            {mode === 'top' &&
-              [20, 30, 50].map((n) => (
+
+            {profileOpen && (
+              <div className="tier-menu" role="menu">
                 <button
-                  key={n}
-                  onClick={() => setLimit(n)}
-                  className={`px-3 py-1 rounded-lg text-xs ${limit === n ? 'bg-black text-white' : 'bg-gray-100'}`}
+                  type="button"
+                  className="tier-menu-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    navigate('/dashboard');
+                  }}
                 >
-                  Top {n}
+                  Dashboard
                 </button>
-              ))}
-          </div>
-
-          {mode === 'search' && (
-            <input
-              className="w-full border rounded-lg px-3 py-2 mb-3"
-              placeholder="Search anime by name..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          )}
-
-          {poolError && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-3">
-              {poolError}
-            </p>
-          )}
-
-          <DropZone
-            id="pool"
-            className="flex flex-wrap gap-2 p-2 min-h-[110px] border-2 border-dashed border-gray-200 rounded-lg"
-          >
-            {pool.map((anime) => (
-              <Card key={anime.id} anime={anime} containerId="pool" />
-            ))}
-            {mode === 'top' && topLoading && (
-              <p className="text-xs text-gray-400 self-center px-2">Loading more…</p>
+                <button
+                  type="button"
+                  className="tier-menu-item tier-menu-item--danger"
+                  onClick={async () => {
+                    setProfileOpen(false);
+                    await handleLogout();
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
             )}
-          </DropZone>
+          </div>
+        </header>
+
+        <div className="tier-shell">
+          <main className="tier-dashboard">
+            <section className="tier-panel tier-panel--left">
+              <div className="tier-controls">
+                {mode === 'top' &&
+                  [20, 30].map((n) => (
+                    <button
+                      key={n}
+                      onClick={() => setLimit(n)}
+                      className={`tier-control ${limit === n ? 'is-active' : ''}`}
+                    >
+                      Top {n}
+                    </button>
+                  ))}
+                <button
+                  type="button"
+                  onClick={() => setMode('search')}
+                  className={`tier-control ${mode === 'search' ? 'is-active' : ''}`}
+                >
+                  Search
+                </button>
+              </div>
+
+              {mode === 'search' && (
+                <input
+                  className="tier-search"
+                  placeholder="Search anime by name..."
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              )}
+
+              {poolError && <p className="tier-error">{poolError}</p>}
+
+              <DropZone id="pool" className="tier-pool">
+                {pool.map((anime) => (
+                  <Card key={anime.id} anime={anime} containerId="pool" />
+                ))}
+                {mode === 'top' && topLoading && <p className="tier-loading">Loading more…</p>}
+              </DropZone>
+            </section>
+
+            <section className="tier-ranking-panel">
+              <div className="tier-ranking-head">
+                <div className="tier-ranking-copy">
+                  <p className="tier-ranking-kicker">Tier ranking</p>
+                  <h2 className="tier-ranking-title">Arrange the lineup</h2>
+                  <span className="tier-muted tier-ranking-subtitle">
+                    {mode === 'top' ? 'Browse the top ranked series' : 'Search for any anime title'}
+                  </span>
+                </div>
+
+                <div className="tier-ranking-actions">
+                  <div className="tier-email-actions">
+                    <input
+                      type="text"
+                      placeholder="Friend's email (optional)"
+                      value={recipientsInput}
+                      onChange={(e) => setRecipientsInput(e.target.value)}
+                      className="tier-email-input"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleEmail}
+                      disabled={emailStatus === 'sending'}
+                      className="tier-email-button"
+                    >
+                      {emailStatus === 'sending' ? 'Sending…' : 'Email list'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="tier-ranking-stack">
+                {TIERS.map((t) => (
+                  <section key={t} className={`tier-section ${TIER_STYLES[t]}`}>
+                    <div className="tier-row">
+                      <div className="tier-row-label">{t}</div>
+                      <DropZone id={`tier-${t}`} className="tier-row-drop">
+                        {tiers[t].map((anime) => (
+                          <Card
+                            key={anime.animeId}
+                            anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl }}
+                            containerId={`tier-${t}`}
+                          />
+                        ))}
+                      </DropZone>
+                    </div>
+                  </section>
+                ))}
+              </div>
+            </section>
+          </main>
         </div>
       </div>
     </DndContext>
