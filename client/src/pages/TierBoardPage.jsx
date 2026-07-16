@@ -80,48 +80,46 @@ const TierBoardPage = () => {
   const [topHasNextPage, setTopHasNextPage] = useState(true);
   const [topLoading, setTopLoading] = useState(false);
 
+
+  const topLoadingRef = useRef(false);
+
   const visibleTop = useMemo(
     () => topPages.filter((a) => !placedIds.has(a.id)).slice(0, limit),
     [topPages, placedIds, limit]
   );
 
-  useEffect(() => {
-    if (mode !== 'top') return;
-    if (visibleTop.length >= limit) return;
-    if (!topHasNextPage || topLoading) return;
+ useEffect(() => {
+  if (mode !== 'top') return;
+  if (visibleTop.length >= limit) return;
+  if (!topHasNextPage || topLoadingRef.current) return;
 
-    let cancelled = false;
-    setTopLoading(true);
+  topLoadingRef.current = true;
+  setTopLoading(true);
 
-    axiosClient
-      .get(`/api/anime/top?page=${topPageCursor}`)
-      .then((res) => {
-        if (cancelled) return;
-        setPoolError('');
-        setTopPages((prev) => {
-          const seen = new Set(prev.map((a) => a.id));
-          const merged = [...prev];
-          res.data.results.forEach((a) => {
-            if (!seen.has(a.id)) merged.push(a);
-          });
-          return merged;
+  axiosClient
+    .get(`/api/anime/top?page=${topPageCursor}`)
+    .then((res) => {
+      setPoolError('');
+      setTopPages((prev) => {
+        const seen = new Set(prev.map((a) => a.id));
+        const merged = [...prev];
+        res.data.results.forEach((a) => {
+          if (!seen.has(a.id)) merged.push(a);
         });
-        setTopHasNextPage(res.data.hasNextPage);
-        setTopPageCursor((p) => p + 1);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setPoolError(err.response?.data?.message || 'Could not load anime right now.');
-        setTopHasNextPage(false); // stop retrying automatically on a persistent failure
-      })
-      .finally(() => {
-        if (!cancelled) setTopLoading(false);
+        return merged;
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, visibleTop.length, limit, topHasNextPage, topLoading, topPageCursor]);
+      setTopHasNextPage(res.data.hasNextPage);
+      setTopPageCursor((p) => p + 1);
+    })
+    .catch((err) => {
+      setPoolError(err.response?.data?.message || 'Could not load anime right now.');
+      setTopHasNextPage(false);
+    })
+    .finally(() => {
+      topLoadingRef.current = false;
+      setTopLoading(false);
+    });
+}, [mode, visibleTop.length, limit, topHasNextPage, topPageCursor]);
 
   // --- Search ---------------------------------------------------------
   const [searchResults, setSearchResults] = useState([]);
@@ -281,11 +279,11 @@ const TierBoardPage = () => {
           <main className="tier-dashboard">
             <section className="tier-panel tier-panel--left">
               <div className="tier-controls">
-                {mode === 'top' &&
+                {
                   [20, 30].map((n) => (
                     <button
                       key={n}
-                      onClick={() => setLimit(n)}
+                      onClick={() => {setMode('top');setLimit(n);}}
                       className={`tier-control ${limit === n ? 'is-active' : ''}`}
                     >
                       Top {n}
