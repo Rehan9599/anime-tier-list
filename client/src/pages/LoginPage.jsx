@@ -32,7 +32,7 @@ const LoginPage = () => {
     setError('');
     try {
       await login(form);
-      navigate('/tierlist');
+      navigate('/dashboard');
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
     }

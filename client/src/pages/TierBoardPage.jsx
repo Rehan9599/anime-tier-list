@@ -280,11 +280,11 @@ const TierBoardPage = () => {
             <section className="tier-panel tier-panel--left">
               <div className="tier-controls">
                 {
-                  [20, 30].map((n) => (
+                  [20, 30, 50].map((n) => (
                     <button
                       key={n}
-                      onClick={() => {setMode('top');setLimit(n);}}
-                      className={`tier-control ${limit === n ? 'is-active' : ''}`}
+                      onClick={() => {setMode('top'); setLimit(n);}}
+                      className={`tier-control ${mode === 'top' && limit === n ? 'is-active' : ''}`}
                     >
                       Top {n}
                     </button>
