@@ -12,6 +12,7 @@ const normalizeJikan = (anime) => ({
   title: anime.title,
   imageUrl: anime.images?.jpg?.image_url,
   score: anime.score,
+  genres: (anime.genres || []).map((g) => g.name),
 });
 
 // AniList scores are 0-100; Jikan/MAL scores are 0-10. Normalize to the
@@ -21,6 +22,7 @@ const normalizeAniList = (media) => ({
   title: media.title.english || media.title.romaji,
   imageUrl: media.coverImage?.large,
   score: media.averageScore ? media.averageScore / 10 : null,
+  genres: media.genres || [],
 });
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -30,14 +32,14 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // MyAnimeList"). This is a known, recurring issue on Jikan's side, not
 // something wrong with our request -- a short retry with backoff clears
 // most of these since the outages are usually seconds long.
-const fetchWithRetry = async (url, params, retries = 2) => {
+const fetchWithRetry = async (url, params, retries = 1) => {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       return await axios.get(url, { params, timeout: 8000, family: 4 });
     } catch (err) {
       lastErr = err;
-      if (attempt < retries) await sleep(500 * (attempt + 1)); // 500ms, then 1000ms
+      if (attempt < retries) await sleep(400);
     }
   }
   throw lastErr;
@@ -63,6 +65,7 @@ const topAnimeQuery = `
         title { romaji english }
         coverImage { large }
         averageScore
+        genres
       }
     }
   }
@@ -76,6 +79,7 @@ const searchAnimeQuery = `
         title { romaji english }
         coverImage { large }
         averageScore
+        genres
       }
     }
   }
@@ -162,5 +166,21 @@ export const searchAnime = async (query) => {
     const friendly = new Error('Search is temporarily unavailable. Please try again shortly.');
     friendly.status = 503;
     throw friendly;
+  }
+};
+
+// Pre-populate the cache for the pages almost every visitor will hit
+// (enough for Top 50, the largest option in the UI) so the first real
+// request of the hour reads from memory instead of waiting on a live
+// Jikan/AniList round trip. Called once on server startup and refreshed
+// periodically -- see server.js.
+export const warmTopAnimeCache = async () => {
+  for (const page of [1, 2]) {
+    try {
+      await getTopAnime(page);
+      console.log(`[jikan] warmed cache for top-anime page ${page}`);
+    } catch (err) {
+      console.warn(`[jikan] cache warm-up failed for page ${page}:`, err.message);
+    }
   }
 };

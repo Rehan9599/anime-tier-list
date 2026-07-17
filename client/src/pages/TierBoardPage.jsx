@@ -54,6 +54,9 @@ const TierBoardPage = () => {
   const [limit, setLimit] = useState(20);
   const [query, setQuery] = useState('');
   const [tiers, setTiers] = useState({ S: [], A: [], B: [], C: [] });
+  const [recommendations, setRecommendations] = useState([]);
+  const [recommendLoading, setRecommendLoading] = useState(false);
+  const [basedOnGenres, setBasedOnGenres] = useState([]);
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving'
   const [poolError, setPoolError] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
@@ -140,6 +143,24 @@ const TierBoardPage = () => {
     return () => clearTimeout(t);
   }, [mode, query]);
 
+
+  useEffect(() => {
+  if (mode !== 'recommend') return;
+  setRecommendLoading(true);
+  setPoolError('');
+  axiosClient
+    .get('/api/tierlist/recommendations?category=anime')
+    .then((res) => {
+      setRecommendations(res.data.recommendations);
+      setBasedOnGenres(res.data.basedOnGenres);
+    })
+    .catch((err) => {
+      setPoolError(err.response?.data?.message || 'Could not get recommendations right now.');
+      setRecommendations([]);
+    })
+    .finally(() => setRecommendLoading(false));
+  }, [mode]);
+
   // --- Tier list load / autosave ---------------------------------------
   useEffect(() => {
     axiosClient.get('/api/tierlist?category=anime').then((res) => {
@@ -183,7 +204,7 @@ const TierBoardPage = () => {
         ...cleaned,
         [tierKey]: [
           ...cleaned[tierKey],
-          { animeId: anime.id, title: anime.title, imageUrl: anime.imageUrl },
+          { animeId: anime.id, title: anime.title, imageUrl: anime.imageUrl, genres: anime.genres || [], score: anime.score ?? null  },
         ],
       };
       scheduleSave(next);
@@ -214,7 +235,7 @@ const TierBoardPage = () => {
     await logout();
     navigate('/login');
   };
-  const pool = mode === 'top' ? visibleTop : visibleSearch;
+  const pool = mode === 'top' ? visibleTop : mode === 'search' ? visibleSearch : recommendations.filter((a) => !placedIds.has(a.id));
   const displayName = user?.username || user?.email?.split('@')[0] || 'Profile';
   const avatarLabel = displayName
     .split(' ')
@@ -296,6 +317,13 @@ const TierBoardPage = () => {
                 >
                   Search
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('recommend')}
+                  className={`tier-control ${mode === 'recommend' ? 'is-active' : ''}`}
+                >
+                  Recommended
+                </button>
               </div>
 
               {mode === 'search' && (
@@ -306,6 +334,9 @@ const TierBoardPage = () => {
                   onChange={(e) => setQuery(e.target.value)}
                 />
               )}
+              {mode === 'recommend' && basedOnGenres.length > 0 && (
+                <p className="tier-muted">Based on your S/A picks: {basedOnGenres.join(', ')}</p>
+              )}
 
               {poolError && <p className="tier-error">{poolError}</p>}
 
@@ -313,7 +344,9 @@ const TierBoardPage = () => {
                 {pool.map((anime) => (
                   <Card key={anime.id} anime={anime} containerId="pool" />
                 ))}
-                {mode === 'top' && topLoading && <p className="tier-loading">Loading more…</p>}
+                {((mode === 'top' && topLoading) || (mode === 'recommend' && recommendLoading)) && (
+                  <p className="tier-loading">{mode === 'recommend' ? 'Finding matches…' : 'Loading more…'}</p>
+                )}
               </DropZone>
             </section>
 

@@ -5,6 +5,11 @@ const animeItemSchema = new mongoose.Schema(
     animeId: { type: Number, required: true },
     title: { type: String, required: true },
     imageUrl: { type: String },
+    // Used to build genre feature vectors for the recommendation engine.
+    // Optional/defaulted so older tier entries (saved before this field
+    // existed) don't break -- they just contribute no genre signal.
+    genres: { type: [String], default: [] },
+    score: { type: Number, default: null },
   },
   { _id: false }
 );
