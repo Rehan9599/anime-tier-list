@@ -3,6 +3,7 @@ import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
 import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
+import { groupByFranchise } from '../utils/franchise';
 import '../styles/tierboard.css';
 
 const TIERS = ['S', 'A', 'B', 'C'];
@@ -20,6 +21,7 @@ const Card = ({ anime, containerId }) => {
     id: `${containerId}:${anime.id}`,
     data: { anime },
   });
+
 
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
@@ -39,7 +41,28 @@ const Card = ({ anime, containerId }) => {
     </div>
   );
 };
-
+const StackedCard = ({ group, expanded, onToggle }) => (
+  <div className="tier-stack">
+    <div className="tier-stack-primary">
+      <Card anime={group.primary} containerId="pool" />
+      {group.related.length > 0 && (
+        <button type="button" className="tier-stack-badge" onClick={onToggle}>
+          +{group.related.length}
+        </button>
+      )}
+    </div>
+    {expanded && group.related.length > 0 && (
+      <div className="tier-stack-overlay">
+        <button type="button" className="tier-stack-close" onClick={onToggle} aria-label="Close">
+          ×
+        </button>
+        {[group.primary, ...group.related].map((anime) => (
+          <Card key={anime.id} anime={anime} containerId="pool" />
+        ))}
+      </div>
+    )}
+  </div>
+);
 const DropZone = ({ id, className, children }) => {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
@@ -54,6 +77,7 @@ const TierBoardPage = () => {
   const [limit, setLimit] = useState(20);
   const [query, setQuery] = useState('');
   const [tiers, setTiers] = useState({ S: [], A: [], B: [], C: [] });
+  const [expandedGroupKey, setExpandedGroupKey] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
   const [recommendLoading, setRecommendLoading] = useState(false);
   const [basedOnGenres, setBasedOnGenres] = useState([]);
@@ -86,16 +110,16 @@ const TierBoardPage = () => {
 
   const topLoadingRef = useRef(false);
 
-  const visibleTop = useMemo(
-    () => topPages.filter((a) => !placedIds.has(a.id)).slice(0, limit),
-    [topPages, placedIds, limit]
-  );
+  const visibleTopGroups = useMemo(() => {
+  const unplaced = topPages.filter((a) => !placedIds.has(a.id));
+  return groupByFranchise(unplaced).slice(0, limit);
+}, [topPages, placedIds, limit]);
 
- useEffect(() => {
+  useEffect(() => {
   if (mode !== 'top') return;
-  if (visibleTop.length >= limit) return;
-  if (!topHasNextPage || topLoadingRef.current) return;
-
+  if (visibleTopGroups.length >= limit) return;
+  if (!topHasNextPage || topLoading) return;
+  if (topPageCursor > 8) return;
   topLoadingRef.current = true;
   setTopLoading(true);
 
@@ -122,7 +146,7 @@ const TierBoardPage = () => {
       topLoadingRef.current = false;
       setTopLoading(false);
     });
-}, [mode, visibleTop.length, limit, topHasNextPage, topPageCursor]);
+}, [mode, visibleTopGroups.length, limit, topHasNextPage, topLoading, topPageCursor]);
 
   // --- Search ---------------------------------------------------------
   const [searchResults, setSearchResults] = useState([]);
@@ -235,7 +259,7 @@ const TierBoardPage = () => {
     await logout();
     navigate('/login');
   };
-  const pool = mode === 'top' ? visibleTop : mode === 'search' ? visibleSearch : recommendations.filter((a) => !placedIds.has(a.id));
+  const pool = mode === 'search' ? visibleSearch : recommendations.filter((a) => !placedIds.has(a.id));
   const displayName = user?.username || user?.email?.split('@')[0] || 'Profile';
   const avatarLabel = displayName
     .split(' ')
@@ -341,12 +365,17 @@ const TierBoardPage = () => {
               {poolError && <p className="tier-error">{poolError}</p>}
 
               <DropZone id="pool" className="tier-pool">
-                {pool.map((anime) => (
-                  <Card key={anime.id} anime={anime} containerId="pool" />
-                ))}
-                {((mode === 'top' && topLoading) || (mode === 'recommend' && recommendLoading)) && (
-                  <p className="tier-loading">{mode === 'recommend' ? 'Finding matches…' : 'Loading more…'}</p>
-                )}
+              {mode === 'top'
+                ? visibleTopGroups.map((group) => (
+                    <StackedCard
+                      key={group.key}
+                      group={group}
+                      expanded={expandedGroupKey === group.key}
+                      onToggle={() => setExpandedGroupKey((k) => (k === group.key ? null : group.key))}
+                    />
+                  ))
+                : pool.map((anime) => <Card key={anime.id} anime={anime} containerId="pool" />)}
+              {mode === 'top' && topLoading && <p className="tier-loading">Loading more…</p>}
               </DropZone>
             </section>
 
