@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import { groupByFranchise } from '../utils/franchise';
+import FriendsPanel from '../components/FriendsPanel';
 import '../styles/tierboard.css';
 
 const TIERS = ['S', 'A', 'B', 'C'];
@@ -84,6 +85,7 @@ const TierBoardPage = () => {
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving'
   const [poolError, setPoolError] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(false);
   const saveTimeout = useRef(null);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -295,6 +297,7 @@ const TierBoardPage = () => {
 
             {profileOpen && (
               <div className="tier-menu" role="menu">
+                <p className="tier-menu-greeting">Hi! {user?.username}</p>
                 <button
                   type="button"
                   className="tier-menu-item"
@@ -304,6 +307,17 @@ const TierBoardPage = () => {
                   }}
                 >
                   Dashboard
+                </button>
+                
+                <button
+                  type="button"
+                  className="tier-menu-item"
+                  onClick={() => {
+                    setProfileOpen(false);
+                    setFriendsOpen(true);
+                  }}
+                >
+                  Friends
                 </button>
                 <button
                   type="button"
@@ -319,6 +333,7 @@ const TierBoardPage = () => {
             )}
           </div>
         </header>
+        {friendsOpen && <FriendsPanel onClose={() => setFriendsOpen(false)} />}
 
         <div className="tier-shell">
           <main className="tier-dashboard">

@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.routes.js';
 import animeRoutes from './routes/anime.routes.js';
 import tierlistRoutes from './routes/tierlist.routes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import friendsRoutes from './routes/friends.routes.js';
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -26,6 +27,7 @@ const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/anime', animeRoutes);
 app.use('/api/tierlist', tierlistRoutes);
+app.use('/api/friends', friendsRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
