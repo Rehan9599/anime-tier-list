@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import TierBoardPage from './pages/TierBoardPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
+import FriendTierListPage from './pages/FriendTierListPage.jsx';
 
 function App() {
   return (
@@ -27,6 +28,14 @@ function App() {
         }
       />
       <Route path="*" element={<DashboardPage />} />
+      <Route
+        path="/friend/:friendId"
+        element={
+          <ProtectedRoute>
+            <FriendTierListPage />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
-import { getTierList, saveTierList, emailTierList, getRecommendations } from '../controllers/tierlist.controller.js';
+import { getTierList, getFriendTierList, saveTierList, emailTierList, getRecommendations } from '../controllers/tierlist.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 
 // The email route costs deliverability/reputation if abused -- keep it tighter
@@ -13,6 +13,7 @@ const emailLimiter = rateLimit({
 
 const router = Router();
 
+router.get('/friend/:friendId', protect, getFriendTierList);
 router.get('/', protect, getTierList);
 router.put('/', protect, saveTierList);
 router.post('/email', protect, emailLimiter, emailTierList);

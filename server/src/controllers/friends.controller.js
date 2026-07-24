@@ -2,16 +2,7 @@ import Friendship from '../models/Friendship.js';
 import FriendRequest from '../models/FriendRequest.js';
 import User from '../models/User.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-
-// Normalizes a pair of user ids into a consistent order so (A,B) and (B,A)
-// are always the same document -- required for Friendship's unique index
-// to actually prevent duplicate/reversed friendships.
-const orderPair = (id1, id2) => [String(id1), String(id2)].sort();
-
-const areFriends = async (id1, id2) => {
-  const [userA, userB] = orderPair(id1, id2);
-  return Friendship.exists({ userA, userB });
-};
+import { orderPair, areFriends } from '../utils/friendship.js';
 
 // Search by username, annotated with the current relationship so the
 // frontend can show the right button (Add / Pending / Friends) without a

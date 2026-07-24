@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import axiosClient from '../api/axiosClient';
+import { useNavigate } from 'react-router-dom';
 
 const STATUS_LABEL = {
   pending_sent: 'Pending',
@@ -8,6 +9,7 @@ const STATUS_LABEL = {
 };
 
 const FriendsPanel = ({ onClose }) => {
+  const navigate = useNavigate();
   const [tab, setTab] = useState('search'); // 'search' | 'requests' | 'friends'
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
@@ -130,12 +132,20 @@ const FriendsPanel = ({ onClose }) => {
         )}
 
         {tab === 'friends' && (
-          <ul className="tier-friend-list">
-            {friends.length === 0 && <li className="tier-muted">No friends yet.</li>}
-            {friends.map((f) => (
-              <li key={f.id} className="tier-friend-row">
-                <span>{f.username}</span>
-              </li>
+         <ul className="tier-friend-list">
+           {friends.length === 0 && <li className="tier-muted">No friends yet.</li>}
+           {friends.map((f) => (
+             <li
+               key={f.id}
+               className="tier-friend-row tier-friend-row--clickable"
+               onClick={() => {
+                 onClose();
+                 navigate(`/friend/${f.id}`);
+               }}
+             >
+               <span>{f.username}</span>
+               <span className="tier-muted">View →</span>
+             </li>
             ))}
           </ul>
         )}

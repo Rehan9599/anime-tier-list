@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { sendTierListEmail } from '../services/email.service.js';
 import { getTopAnime } from '../services/jikan.service.js';
 import { recommend } from '../services/recommend.service.js';
+import { areFriends } from '../utils/friendship.js';
 
 export const getTierList = asyncHandler(async (req, res) => {
   const category = req.query.category || 'anime';
@@ -12,6 +13,24 @@ export const getTierList = asyncHandler(async (req, res) => {
     tierList = await TierList.create({ userId: req.userId, category });
   }
   res.json({ tierList });
+});
+
+export const getFriendTierList = asyncHandler(async (req, res) => {
+  const { friendId } = req.params;
+  const category = req.query.category || 'anime';
+
+  if (friendId !== String(req.userId) && !(await areFriends(req.userId, friendId))) {
+    return res.status(403).json({ message: 'You can only view a friend’s tier list.' });
+  }
+
+  const friend = await User.findById(friendId);
+  if (!friend) return res.status(404).json({ message: 'Friend not found' });
+
+  const tierList =
+    (await TierList.findOne({ userId: friendId, category })) ||
+    (await TierList.create({ userId: friendId, category }));
+
+  res.json({ friendUsername: friend.username, tiers: tierList.tiers });
 });
 
 // Frontend always sends the *complete* current state of all four tiers,
