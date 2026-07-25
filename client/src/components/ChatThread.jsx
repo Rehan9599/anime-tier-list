@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { MdArrowBack } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
 import socket from '../socket';
 
@@ -37,7 +38,7 @@ const ChatThread = ({ friend, myUserId, onBack }) => {
     <div className="chat-thread">
       <div className="chat-thread-header">
         <button type="button" className="chat-thread-back" onClick={onBack} aria-label="Back to friends">
-          ←
+          <MdArrowBack size={20} />
         </button>
         <span className="chat-thread-name">{friend.username}</span>
       </div>

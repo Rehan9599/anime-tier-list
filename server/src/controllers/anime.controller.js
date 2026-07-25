@@ -1,4 +1,4 @@
-import { getTopAnime, searchAnime } from '../services/jikan.service.js';
+import { getTopAnime, searchAnime, getTrendingAnime } from '../services/jikan.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
 export const top = asyncHandler(async (req, res) => {
@@ -11,5 +11,10 @@ export const search = asyncHandler(async (req, res) => {
   const { q } = req.query;
   if (!q || q.trim().length < 2) return res.json({ results: [] });
   const results = await searchAnime(q.trim());
+  res.json({ results });
+});
+
+export const trending = asyncHandler(async (req, res) => {
+  const results = await getTrendingAnime();
   res.json({ results });
 });

@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { MdChatBubbleOutline, MdNotificationsNone, MdLogout, MdClose } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import FriendsSidebar from '../components/FriendsSidebar';
+import Carousel from '../components/Carousel';
+import PosterRow from '../components/PosterRow';
 
 // Only anime is wired up for now. Adding movies/books later is just
 // flipping `active: true` here once their API routes exist -- the tier
@@ -19,30 +22,43 @@ const DashboardPage = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
-  const [stats, setStats] = useState({ ranked: 0, sTier: 0, friends: 0 });
+  const [chatOpen, setChatOpen] = useState(false);
   const [friendsTab, setFriendsTab] = useState('friends'); // 'friends' | 'add' | 'requests'
   const [chatFriend, setChatFriend] = useState(null); // null = list view, else = chat thread view
   const [pendingCount, setPendingCount] = useState(0);
+
+  const [ratedItems, setRatedItems] = useState([]);
+  const [trendingItems, setTrendingItems] = useState([]);
+  const [highlightItems, setHighlightItems] = useState([]);
 
   const refreshPendingCount = () => {
     axiosClient.get('/api/friends/requests').then((res) => setPendingCount(res.data.requests.length));
   };
 
   useEffect(() => {
-    Promise.all([
-      axiosClient.get('/api/tierlist?category=anime'),
-      axiosClient.get('/api/friends'),
-    ]).then(([tierRes, friendsRes]) => {
-      const tiers = tierRes.data.tierList.tiers;
-      const ranked = TIER_KEYS.reduce((sum, t) => sum + tiers[t].length, 0);
-      setStats({ ranked, sTier: tiers.S.length, friends: friendsRes.data.friends.length });
+    axiosClient.get('/api/tierlist?category=anime').then((res) => {
+      const tiers = res.data.tierList.tiers;
+      const flattened = TIER_KEYS.flatMap((t) =>
+        tiers[t].map((a) => ({ id: a.animeId, title: a.title, imageUrl: a.imageUrl, tier: t }))
+      );
+      setRatedItems(flattened);
     });
+
+    axiosClient.get('/api/anime/trending').then((res) => setTrendingItems(res.data.results));
+    axiosClient.get('/api/anime/top?page=1').then((res) => setHighlightItems(res.data.results.slice(0, 8)));
+
     refreshPendingCount();
   }, []);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const openChat = (tab) => {
+    setChatFriend(null);
+    setFriendsTab(tab);
+    setChatOpen(true);
   };
 
   const displayName = user?.username || user?.email?.split('@')[0] || 'Profile';
@@ -55,82 +71,104 @@ const DashboardPage = () => {
     .toUpperCase();
 
   return (
-    <div className="tier-page">
-      <header className="tier-topbar">
-        <div className="tier-brand">
-          <div className="tier-brand-mark">◎</div>
-          <div className="tier-brand-copy">
-            <h1 className="tier-brand-title">Tier List Hub</h1>
-            <p className="tier-brand-subtitle">Your rankings, your rules.</p>
+    <div className={`app-shell ${chatOpen ? 'app-shell--chat-open' : ''}`}>
+      <div className="app-main">
+        <header className="tier-topbar">
+          <div className="tier-brand">
+            <div className="tier-brand-mark">◎</div>
+            <div className="tier-brand-copy">
+              <h1 className="tier-brand-title">Tier List Hub</h1>
+              <p className="tier-brand-subtitle">Your rankings, your rules.</p>
+            </div>
           </div>
-        </div>
 
-        <div className="tier-topbar-actions">
-          <button
-            type="button"
-            className="tier-notif-bell"
-            onClick={() => {
-              setChatFriend(null);
-              setFriendsTab('requests');
-            }}
-            aria-label="Friend requests"
-          >
-            🔔
-            {pendingCount > 0 && <span className="tier-notif-badge">{pendingCount}</span>}
-          </button>
-
-          <div className="tier-profile">
-            <button
-              type="button"
-              onClick={() => setProfileOpen((open) => !open)}
-              className="tier-profile-button"
-              aria-haspopup="menu"
-              aria-expanded={profileOpen}
-            >
-              <span className="tier-avatar">{avatarLabel || 'U'}</span>
-              <span className="tier-toggle-icon" aria-hidden="true">☰</span>
+          <div className="tier-topbar-actions">
+            <button type="button" className="tier-icon-btn" onClick={() => openChat('friends')} aria-label="Chat">
+              <MdChatBubbleOutline size={20} />
             </button>
 
-            {profileOpen && (
-              <div className="tier-menu" role="menu">
-                <p className="tier-menu-greeting">Hi! {user?.username}</p>
-                <button
-                  type="button"
-                  className="tier-menu-item tier-menu-item--danger"
-                  onClick={async () => {
-                    setProfileOpen(false);
-                    await handleLogout();
-                  }}
-                >
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+            <button type="button" className="tier-icon-btn" onClick={() => openChat('requests')} aria-label="Notifications">
+              <MdNotificationsNone size={20} />
+              {pendingCount > 0 && <span className="tier-notif-badge">{pendingCount}</span>}
+            </button>
 
-      <div className="dash-layout">
-        <main className="dash-main">
-          <section className="dash-hero">
-            <h2 className="dash-hero-title">Welcome back, {user?.username}</h2>
-            <p className="dash-hero-subtitle">Here's where things stand.</p>
-
-            <div className="dash-stats">
-              <div className="dash-stat-card">
-                <span className="dash-stat-value">{stats.ranked}</span>
-                <span className="dash-stat-label">Anime ranked</span>
-              </div>
-              <div className="dash-stat-card">
-                <span className="dash-stat-value">{stats.sTier}</span>
-                <span className="dash-stat-label">S-tier picks</span>
-              </div>
-              <div className="dash-stat-card">
-                <span className="dash-stat-value">{stats.friends}</span>
-                <span className="dash-stat-label">Friends</span>
-              </div>
+            <div className="tier-profile">
+              <button
+                type="button"
+                className="tier-icon-btn"
+                onClick={() => setProfileOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={profileOpen}
+                aria-label="Profile"
+              >
+                <span className="tier-avatar tier-avatar--sm">{avatarLabel || 'U'}</span>
+              </button>
+              {profileOpen && (
+                <div className="tier-menu" role="menu">
+                  <p className="tier-menu-greeting">Hi! {user?.username}</p>
+                </div>
+              )}
             </div>
-          </section>
+
+            <button type="button" className="tier-icon-btn" onClick={handleLogout} aria-label="Logout">
+              <MdLogout size={20} />
+            </button>
+          </div>
+        </header>
+
+        <main className="dash-main-full">
+          <section className="dash-carousel-grid">
+            <div className="dash-slide-box">
+      <h3 className="dash-section-title">Your rankings</h3>
+      <Carousel
+        className="carousel--single-item"
+        items={ratedItems}
+        renderItem={(a) => (
+          <div className="dash-highlight-card" style={{ backgroundImage: `url(${a.imageUrl})` }}>
+            <span className={`dash-slide-tier dash-slide-tier--${a.tier}`}>{a.tier}</span>
+            <div className="dash-highlight-overlay">
+              
+              <p className="dash-highlight-title">{a.title}</p>
+              {a.score != null && <span className="tier-muted">★ {a.score.toFixed(1)}</span>}
+            </div>
+          </div>
+        )}
+      />
+    </div>
+
+            <div className="dash-slide-box">
+      <h3 className="dash-section-title">Trending now</h3>
+      <Carousel
+        className="carousel--single-item"
+        items={trendingItems}
+        renderItem={(a) => (
+          <div className="dash-highlight-card" style={{ backgroundImage: `url(${a.imageUrl})` }}>
+            <div className="dash-highlight-overlay">
+              <p className="dash-highlight-title">{a.title}</p>
+              {a.score != null && <span className="tier-muted">★ {a.score.toFixed(1)}</span>}
+            </div>
+          </div>
+        )}
+      />
+    </div>
+
+    {/* Carousel 3: Highlights */}
+    <div className="dash-slide-box">
+      <h3 className="dash-section-title">Highlights</h3>
+      <Carousel
+        className="carousel--highlight"
+        items={highlightItems}
+        renderItem={(a) => (
+          <div className="dash-highlight-card" style={{ backgroundImage: `url(${a.imageUrl})` }}>
+            <div className="dash-highlight-overlay">
+              <p className="dash-highlight-title">{a.title}</p>
+              {a.score != null && <span className="tier-muted">★ {a.score.toFixed(1)}</span>}
+            </div>
+          </div>
+        )}
+      />
+    </div>
+    </section>
 
           <section className="dash-categories">
             <h3 className="dash-section-title">Categories</h3>
@@ -151,7 +189,14 @@ const DashboardPage = () => {
             </div>
           </section>
         </main>
+      </div>
 
+      <div className={`chat-slide-panel ${chatOpen ? 'chat-slide-panel--open' : ''}`}>
+        <div className="chat-slide-panel-topbar">
+          <button type="button" className="tier-icon-btn" onClick={() => setChatOpen(false)} aria-label="Close">
+            <MdClose size={20} />
+          </button>
+        </div>
         <FriendsSidebar
           tab={friendsTab}
           onTabChange={setFriendsTab}

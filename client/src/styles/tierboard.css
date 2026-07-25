@@ -867,20 +867,7 @@
 .dash-category-card--disabled:hover { border-color: rgba(255,255,255,0.08); transform: none; }
 .dash-category-label { font-size: 18px; font-weight: 700; }
 
-.friends-sidebar {
-  flex: 0 0 30%;
-  max-width: 30%;
-  box-sizing: border-box;
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  border-left: 1px solid rgba(255,255,255,0.08);
-  background: #15151c;
-  padding: 16px;
-  overflow-y: auto;
-}
+
 .friends-sidebar--chat {
   padding: 0;
   overflow: hidden;
@@ -929,4 +916,169 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+
+.app-shell {
+   background:
+    radial-gradient(circle at 15% 12%, rgba(244, 114, 182, 0.14), transparent 0 22%),
+    radial-gradient(circle at 84% 18%, rgba(251, 191, 36, 0.12), transparent 0 20%),
+    radial-gradient(circle at 50% 88%, rgba(168, 85, 247, 0.16), transparent 0 28%),
+    linear-gradient(180deg, #050308 0%, #0b0710 38%, #120d17 100%);
+  color: #fff7fb;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: margin-right 0.3s ease;
+  height: 100vh;
+  overflow: hidden;
+}
+.app-shell--chat-open .app-main {
+  margin-right: 380px; /* pushes navbar + content left, Instagram-style */
+}
+
+.tier-topbar { flex: 0 0 auto; }
+
+.dash-main-full {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.chat-slide-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100vh;
+  background: #15151c;
+  border-left: 1px solid rgba(255,255,255,0.08);
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+.chat-slide-panel--open { transform: translateX(0); }
+.chat-slide-panel-topbar { display: flex; justify-content: flex-end; padding: 8px; flex: 0 0 auto; }
+
+.friends-sidebar { width: 100%; flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 16px 16px; overflow-y: auto; }
+.friends-sidebar--chat { padding: 0; overflow: hidden; }
+
+.tier-topbar-actions { display: flex; align-items: center; gap: 8px; position: relative; }
+.tier-icon-btn {
+  position: relative; background: none; border: none; color: inherit;
+  font-size: 18px; cursor: pointer; padding: 8px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.tier-icon-btn:hover { background: rgba(255,255,255,0.06); }
+.tier-avatar--sm { width: 24px; height: 24px; font-size: 11px; }
+.tier-notif-badge {
+  position: absolute; top: 2px; right: 2px; background: #f5a623; color: #15151c;
+  font-size: 10px; font-weight: 700; border-radius: 999px; min-width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center; padding: 0 3px;
+}
+.dash-slide-row { display: flex; gap: 20px; margin-bottom: 24px; }
+.dash-slide-box { flex: 1; min-width: 0; }
+.dash-section-title { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: rgba(255,255,255,0.5); margin: 0 0 12px; }
+
+.carousel { position: relative; overflow: hidden; border-radius: 14px; background: #15151c; border: 1px solid rgba(255,255,255,0.08); }
+.carousel-track { display: flex; transition: transform 0.4s ease; }
+.carousel-slide { flex: 0 0 100%; min-width: 0; }
+.carousel-dots { position: absolute; bottom: 8px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; }
+.carousel-dot { width: 6px; height: 6px; border-radius: 999px; border: none; background: rgba(255,255,255,0.3); cursor: pointer; padding: 0; }
+.carousel-dot.is-active { background: #f5a623; }
+.carousel-empty { padding: 40px; text-align: center; }
+
+.dash-slide-card { position: relative; height: 220px; }
+.dash-slide-card img { width: 100%; height: 100%; object-fit: cover; }
+.dash-slide-card p { position: absolute; bottom: 0; left: 0; right: 0; margin: 0; padding: 24px 12px 10px; font-size: 13px; font-weight: 600; background: linear-gradient(to top, rgba(0,0,0,0.85), transparent); }
+.dash-slide-tier {
+  position: absolute; top: 8px; left: 8px; width: 26px; height: 26px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; color: #15151c;
+}
+.dash-slide-tier--S { background: #f43f5e; }
+.dash-slide-tier--A { background: #f97316; }
+.dash-slide-tier--B { background: #eab308; }
+.dash-slide-tier--C { background: #22c55e; }
+
+.dash-highlights { margin-bottom: 24px; }
+.carousel--highlight { border-radius: 18px; }
+.dash-highlight-card { height: 340px; background-size: cover; background-position: center; position: relative; }
+.dash-highlight-overlay {
+  position: absolute; bottom: 0; left: 0; right: 0; padding: 32px 28px;
+  background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
+}
+.dash-highlight-title { font-size: 24px; font-weight: 700; margin: 0 0 6px; }
+
+.poster-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x mandatory;
+}
+.poster-row-item { flex: 0 0 auto; scroll-snap-align: start; }
+
+.dash-poster-card {
+  height: 340px; background-size: cover; background-position: center; position: relative;
+}
+.dash-poster-card img { width: 100%; height: 100%; object-fit: cover; }
+.dash-poster-card p {
+  position: absolute; bottom: 0; left: 0; right: 0; margin: 0;
+  padding: 20px 8px 6px; font-size: 12px; font-weight: 600;
+  background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+}
+
+.dash-slide-tier {
+  position: absolute; top: 6px; left: 6px; width: 42px; height: 42px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; color: #f8f8fa;
+}
+
+/* Container for the 3 side-by-side carousels */
+.dash-carousel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* 3 equal columns */
+  gap: 20px;
+  width: 100%;
+}
+
+/* Individual box wrapper */
+.dash-slide-box {
+  display: flex;
+  flex-direction: column;
+  height:340px;
+  min-width: 0; /* Prevents flex/grid overflow issues */
+}
+
+/* Force each carousel slide to take 100% width (showing 1 item at a time) */
+.dash-carousel-grid .carousel-slide,
+.dash-carousel-grid .dash-poster-card,
+.dash-carousel-grid .dash-highlight-card {
+  width: 100%;
+  flex: 0 0 100%;
+  box-sizing: border-box;
+}
+
+/* Ensure images fit nicely within their cards */
+.dash-poster-card img {
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+/* Responsive adjustment for mobile/tablet screens */
+@media (max-width: 900px) {
+  .dash-carousel-grid {
+    grid-template-columns: 1fr; /* Stack vertically on smaller screens */
+  }
 }

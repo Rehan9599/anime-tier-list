@@ -85,6 +85,20 @@ const searchAnimeQuery = `
   }
 `;
 
+const trendingQuery = `
+  query ($perPage: Int) {
+    Page(perPage: $perPage) {
+      media(sort: TRENDING_DESC, type: ANIME) {
+        id
+        title { romaji english }
+        coverImage { large }
+        averageScore
+        genres
+      }
+    }
+  }
+`;
+
 const queryAniList = async (query, variables) => {
   const { data } = await axios.post(
     ANILIST_URL,
@@ -164,6 +178,37 @@ export const searchAnime = async (query) => {
     }
 
     const friendly = new Error('Search is temporarily unavailable. Please try again shortly.');
+    friendly.status = 503;
+    throw friendly;
+  }
+};
+
+// "New releases / trending" -- Jikan's currently-airing-season endpoint is
+// the closest fit for "new released," with AniList's TRENDING_DESC sort as
+// the independent fallback if Jikan is degraded.
+export const getTrendingAnime = async () => {
+  const cacheKey = 'trending';
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const { data } = await fetchWithRetry(`${JIKAN_URL}/seasons/now`, {});
+    const results = data.data.slice(0, 20).map(normalizeJikan);
+    cache.set(cacheKey, results, 3600);
+    return results;
+  } catch (err) {
+    console.error('[jikan] getTrendingAnime failed after retries:', describeError(err));
+
+    try {
+      const results = await queryAniList(trendingQuery, { perPage: 20 });
+      cache.set(cacheKey, results, 900);
+      console.warn('[jikan] Jikan is down, served trending results from AniList instead');
+      return results;
+    } catch (aniListErr) {
+      console.error('[anilist] trending fallback also failed:', describeError(aniListErr));
+    }
+
+    const friendly = new Error('Trending anime is temporarily unavailable. Please try again shortly.');
     friendly.status = 503;
     throw friendly;
   }
