@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import axiosClient from '../api/axiosClient';
 import socket from '../socket';
 
-const ChatWidget = ({ friendId, friendUsername, myUserId }) => {
-  const [open, setOpen] = useState(false);
+const ChatWidget = ({ friendId, friendUsername, myUserId, initiallyOpen = false }) => {
+  const [open, setOpen] = useState(initiallyOpen);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState('');
   const scrollRef = useRef(null);

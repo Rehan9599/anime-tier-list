@@ -1,96 +1,169 @@
-import { Link } from 'react-router-dom';
-import '../styles/auth.css';
-import '../styles/dashboard.css';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import axiosClient from '../api/axiosClient';
+import { useAuth } from '../context/AuthContext';
+import FriendsSidebar from '../components/FriendsSidebar';
 
-// Only anime is wired up for now. Adding movies/games later is just
+// Only anime is wired up for now. Adding movies/books later is just
 // flipping `active: true` here once their API routes exist -- the tier
 // board and autosave code underneath don't change.
-const categories = [
-  { key: 'animes', label: 'Anime', active: true, to: '/tierlist' },
-  { key: 'movies', label: 'Movies', active: false },
-  { key: 'games', label: 'Games', active: false },
+const CATEGORIES = [
+  { key: 'anime', label: 'Anime', active: true, to: '/tierlist', blurb: 'Rank your favorites, S to C.' },
+  { key: 'movie', label: 'Movies', active: false, blurb: 'Coming soon.' },
+  { key: 'book', label: 'Books', active: false, blurb: 'Coming soon.' },
 ];
 
-const dashboardHighlights = [
-  {
-    label: 'Anime live now',
-    value: 'Drop straight into the tier board',
-    description: 'Browse the current anime catalog, drag titles into tiers, and autosave your picks.',
-  },
-  {
-    label: 'Movies next',
-    value: 'Coming in the same visual system',
-    description: 'New categories will reuse the same themed routes, cards, and save flow.',
-  },
-  {
-    label: 'Games later',
-    value: 'Ready when the API route is wired',
-    description: 'The dashboard already has a slot waiting for the next category to go live.',
-  },
-];
+const TIER_KEYS = ['S', 'A', 'B', 'C'];
 
-const DashboardPage = () => (
-  <div className="auth-page dashboard-page flex min-h-screen items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
-    <span className="auth-orb auth-orb-one" aria-hidden="true" />
-    <span className="auth-orb auth-orb-two" aria-hidden="true" />
-    <span className="auth-orb auth-orb-three" aria-hidden="true" />
+const DashboardPage = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [stats, setStats] = useState({ ranked: 0, sTier: 0, friends: 0 });
+  const [friendsTab, setFriendsTab] = useState('friends'); // 'friends' | 'add' | 'requests'
+  const [chatFriend, setChatFriend] = useState(null); // null = list view, else = chat thread view
+  const [pendingCount, setPendingCount] = useState(0);
 
-    <div className="dashboard-shell">
-      <section className="auth-story dashboard-hero auth-reveal">
-        <div className="auth-form-shell relative z-10">
-          <span className="auth-kicker">Anime Tier List</span>
-          <h2 className="auth-heading">
-            <span className="auth-heading-accent">Choose a category</span> and start ranking
-          </h2>
-          <p className="auth-subheading">
-            The dashboard shares the same dark glass theme as auth and the tier board, so moving between pages feels seamless.
-          </p>
+  const refreshPendingCount = () => {
+    axiosClient.get('/api/friends/requests').then((res) => setPendingCount(res.data.requests.length));
+  };
 
-          <div className="auth-points">
-            {dashboardHighlights.map((item, index) => (
-              <article key={item.label} className={`auth-point auth-reveal auth-delay-${index + 1}`}>
-                <p className="auth-point-label">{item.label}</p>
-                <p className="auth-point-value">{item.value}</p>
-                <p className="auth-meta-text mt-2 text-sm">{item.description}</p>
-              </article>
-            ))}
+  useEffect(() => {
+    Promise.all([
+      axiosClient.get('/api/tierlist?category=anime'),
+      axiosClient.get('/api/friends'),
+    ]).then(([tierRes, friendsRes]) => {
+      const tiers = tierRes.data.tierList.tiers;
+      const ranked = TIER_KEYS.reduce((sum, t) => sum + tiers[t].length, 0);
+      setStats({ ranked, sTier: tiers.S.length, friends: friendsRes.data.friends.length });
+    });
+    refreshPendingCount();
+  }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  const displayName = user?.username || user?.email?.split('@')[0] || 'Profile';
+  const avatarLabel = displayName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
+  return (
+    <div className="tier-page">
+      <header className="tier-topbar">
+        <div className="tier-brand">
+          <div className="tier-brand-mark">◎</div>
+          <div className="tier-brand-copy">
+            <h1 className="tier-brand-title">Tier List Hub</h1>
+            <p className="tier-brand-subtitle">Your rankings, your rules.</p>
           </div>
         </div>
-      </section>
 
-      <section className="auth-card dashboard-panel auth-reveal">
-        <div className="auth-form-shell relative z-10">
-          <header className="auth-form-header">
-            <p className="auth-form-kicker">Dashboard</p>
-            <h1 className="auth-form-title">Pick your lane</h1>
-            <p className="auth-form-copy">
-              Anime is ready now. The other categories are reserved for future routes and will light up when they are wired up.
-            </p>
-          </header>
+        <div className="tier-topbar-actions">
+          <button
+            type="button"
+            className="tier-notif-bell"
+            onClick={() => {
+              setChatFriend(null);
+              setFriendsTab('requests');
+            }}
+            aria-label="Friend requests"
+          >
+            🔔
+            {pendingCount > 0 && <span className="tier-notif-badge">{pendingCount}</span>}
+          </button>
 
-          <div className="dashboard-grid" role="list" aria-label="Categories">
-            {categories.map((c) =>
-              c.active ? (
-                <Link key={c.key} to={c.to} className="dashboard-tile dashboard-tile--active" role="listitem">
-                  <span className="dashboard-tile-badge">Ready</span>
-                  <span className="dashboard-tile-title">{c.label}</span>
-                  <span className="dashboard-tile-copy">Open the tier board and start sorting anime.</span>
-                  <span className="dashboard-tile-action">Enter tier board</span>
-                </Link>
-              ) : (
-                <div key={c.key} className="dashboard-tile dashboard-tile--inactive" role="listitem" aria-disabled="true">
-                  <span className="dashboard-tile-badge dashboard-tile-badge--muted">Soon</span>
-                  <span className="dashboard-tile-title">{c.label}</span>
-                  <span className="dashboard-tile-copy">This category is waiting for its route and data source.</span>
-                  <span className="dashboard-tile-action dashboard-tile-action--muted">Coming soon</span>
-                </div>
-              )
+          <div className="tier-profile">
+            <button
+              type="button"
+              onClick={() => setProfileOpen((open) => !open)}
+              className="tier-profile-button"
+              aria-haspopup="menu"
+              aria-expanded={profileOpen}
+            >
+              <span className="tier-avatar">{avatarLabel || 'U'}</span>
+              <span className="tier-toggle-icon" aria-hidden="true">☰</span>
+            </button>
+
+            {profileOpen && (
+              <div className="tier-menu" role="menu">
+                <p className="tier-menu-greeting">Hi! {user?.username}</p>
+                <button
+                  type="button"
+                  className="tier-menu-item tier-menu-item--danger"
+                  onClick={async () => {
+                    setProfileOpen(false);
+                    await handleLogout();
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
             )}
           </div>
         </div>
-      </section>
+      </header>
+
+      <div className="dash-layout">
+        <main className="dash-main">
+          <section className="dash-hero">
+            <h2 className="dash-hero-title">Welcome back, {user?.username}</h2>
+            <p className="dash-hero-subtitle">Here's where things stand.</p>
+
+            <div className="dash-stats">
+              <div className="dash-stat-card">
+                <span className="dash-stat-value">{stats.ranked}</span>
+                <span className="dash-stat-label">Anime ranked</span>
+              </div>
+              <div className="dash-stat-card">
+                <span className="dash-stat-value">{stats.sTier}</span>
+                <span className="dash-stat-label">S-tier picks</span>
+              </div>
+              <div className="dash-stat-card">
+                <span className="dash-stat-value">{stats.friends}</span>
+                <span className="dash-stat-label">Friends</span>
+              </div>
+            </div>
+          </section>
+
+          <section className="dash-categories">
+            <h3 className="dash-section-title">Categories</h3>
+            <div className="dash-category-grid">
+              {CATEGORIES.map((c) =>
+                c.active ? (
+                  <Link key={c.key} to={c.to} className="dash-category-card">
+                    <span className="dash-category-label">{c.label}</span>
+                    <span className="tier-muted">{c.blurb}</span>
+                  </Link>
+                ) : (
+                  <div key={c.key} className="dash-category-card dash-category-card--disabled">
+                    <span className="dash-category-label">{c.label}</span>
+                    <span className="tier-muted">{c.blurb}</span>
+                  </div>
+                )
+              )}
+            </div>
+          </section>
+        </main>
+
+        <FriendsSidebar
+          tab={friendsTab}
+          onTabChange={setFriendsTab}
+          chatFriend={chatFriend}
+          onOpenChat={(friend) => setChatFriend(friend)}
+          onCloseChat={() => setChatFriend(null)}
+          onRequestsChanged={refreshPendingCount}
+          myUserId={user?.id}
+        />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export default DashboardPage;
