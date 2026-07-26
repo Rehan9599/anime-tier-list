@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
 import { useNavigate } from 'react-router-dom';
+import { MdChatBubbleOutline, MdNotificationsNone, MdLogout, MdClose, MdChevronLeft, MdChevronRight } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import { groupByFranchise } from '../utils/franchise';
 import FriendsPanel from '../components/FriendsPanel';
 import '../styles/tierboard.css';
+import FriendsSidebar from '../components/FriendsSidebar';
 
 const TIERS = ['S', 'A', 'B', 'C'];
 const TIER_STYLES = {
@@ -84,9 +86,12 @@ const TierBoardPage = () => {
   const [basedOnGenres, setBasedOnGenres] = useState([]);
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving'
   const [poolError, setPoolError] = useState('');
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [friendsOpen, setFriendsOpen] = useState(false);
   const saveTimeout = useRef(null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [friendsTab, setFriendsTab] = useState('friends'); // 'friends' | 'add' | 'requests'
+  const [chatFriend, setChatFriend] = useState(null); // null = list view, else = chat thread view
+  const [pendingCount, setPendingCount] = useState(0);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
@@ -116,7 +121,14 @@ const TierBoardPage = () => {
   const unplaced = topPages.filter((a) => !placedIds.has(a.id));
   return groupByFranchise(unplaced).slice(0, limit);
 }, [topPages, placedIds, limit]);
-
+const refreshPendingCount = () => {
+    axiosClient.get('/api/friends/requests').then((res) => setPendingCount(res.data.requests.length));
+  };
+  const openChat = (tab) => {
+    setChatFriend(null);
+    setFriendsTab(tab);
+    setChatOpen(true);
+  };
   useEffect(() => {
   if (mode !== 'top') return;
   if (visibleTopGroups.length >= limit) return;
@@ -278,62 +290,43 @@ const TierBoardPage = () => {
           <div className="tier-brand">
             <div className="tier-brand-mark">◎</div>
             <div className="tier-brand-copy">
-              <h1 className="tier-brand-title">My anime tier list</h1>
-              <p className="tier-brand-subtitle">Build, save, and share rankings with an anime-themed workspace.</p>
+              <h1 className="tier-brand-title">Tier List Hub</h1>
+              <p className="tier-brand-subtitle">Your rankings, your rules.</p>
             </div>
           </div>
 
-          <div className="tier-profile">
-            <button
-              type="button"
-              onClick={() => setProfileOpen((open) => !open)}
-              className="tier-profile-button"
-              aria-haspopup="menu"
-              aria-expanded={profileOpen}
-            >
-              <span className="tier-avatar">{avatarLabel || 'U'}</span>
-              <span className="tier-toggle-icon" aria-hidden="true">☰</span>
-            </button>
+          <div className="tier-topbar-actions">
+            <button type="button" className="tier-icon-btn" onClick={() => openChat('friends')} aria-label="Chat">
+                <MdChatBubbleOutline size={20} />
+              </button>
+  
+              <button type="button" className="tier-icon-btn" onClick={() => openChat('requests')} aria-label="Notifications">
+                <MdNotificationsNone size={20} />
+                {pendingCount > 0 && <span className="tier-notif-badge">{pendingCount}</span>}
+              </button>
+            <div className="tier-profile">
+              <button
+                type="button"
+                className="tier-icon-btn"
+                onClick={() => setProfileOpen((open) => !open)}
+                aria-haspopup="menu"
+                aria-expanded={profileOpen}
+                aria-label="Profile"
+              >
+                <span className="tier-avatar tier-avatar--sm">{avatarLabel || 'U'}</span>
+              </button>
+              {profileOpen && (
+                <div className="tier-menu" role="menu">
+                  <p className="tier-menu-greeting">Hi! {user?.username}</p>
+                </div>
+              )}
+            </div>
 
-            {profileOpen && (
-              <div className="tier-menu" role="menu">
-                <p className="tier-menu-greeting">Hi! {user?.username}</p>
-                <button
-                  type="button"
-                  className="tier-menu-item"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    navigate('/dashboard');
-                  }}
-                >
-                  Dashboard
-                </button>
-                
-                <button
-                  type="button"
-                  className="tier-menu-item"
-                  onClick={() => {
-                    setProfileOpen(false);
-                    setFriendsOpen(true);
-                  }}
-                >
-                  Friends
-                </button>
-                <button
-                  type="button"
-                  className="tier-menu-item tier-menu-item--danger"
-                  onClick={async () => {
-                    setProfileOpen(false);
-                    await handleLogout();
-                  }}
-                >
-                  Logout
-                </button>
-              </div>
-            )}
+            <button type="button" className="tier-icon-btn" onClick={handleLogout} aria-label="Logout">
+              <MdLogout size={20} />
+            </button>
           </div>
         </header>
-        {friendsOpen && <FriendsPanel onClose={() => setFriendsOpen(false)} />}
 
         <div className="tier-shell">
           <main className="tier-dashboard">
