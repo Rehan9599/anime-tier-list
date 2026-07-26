@@ -23,11 +23,11 @@ const Carousel = ({ items, renderItem, autoMs = 4000, className = '' }) => {
   return (
     <div className={`carousel ${className}`}>
       <div className="carousel-track" style={{ transform: `translateX(-${index * 100}%)` }}>
-        {items.map((item, i) => (
-          <div key={item.id ?? i} className="carousel-slide">
-            {renderItem(item)}
-          </div>
-        ))}
+      {items.map((item, i) => (
+        <div key={`${item.id ?? item.mal_id ?? 'slide'}-${i}`} className="carousel-slide">
+          {renderItem(item)}
+        </div>
+      ))}
       </div>
 
       {items.length > 1 && (

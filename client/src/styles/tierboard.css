@@ -1082,3 +1082,93 @@
     grid-template-columns: 1fr; /* Stack vertically on smaller screens */
   }
 }
+
+.coverflow-section { margin-bottom: 24px; }
+
+.coverflow {
+  position: relative;
+  height: 380px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.coverflow-panel {
+  position: absolute;
+  top: 0;
+  width: 46%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.45s ease, opacity 0.45s ease, filter 0.45s ease;
+}
+.coverflow-panel .carousel { flex: 1; min-height: 0; }
+.coverflow-panel .dash-highlight-card { height: 100%; }
+
+.coverflow-panel--center {
+  transform: translateX(0) scale(1.08);
+  opacity: 1;
+  z-index: 3;
+  filter: none;
+  cursor: default;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.coverflow-panel--left {
+  transform: translateX(-58%) scale(0.82);
+  opacity: 0.4;
+  z-index: 2;
+  filter: brightness(0.55) saturate(0.8);
+}
+.coverflow-panel--right {
+  transform: translateX(58%) scale(0.82);
+  opacity: 0.4;
+  z-index: 2;
+  filter: brightness(0.55) saturate(0.8);
+}
+
+.coverflow-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.3);
+  border: none;
+  color: #fff;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.coverflow-arrow:hover { background: rgba(0, 0, 0, 0.55); }
+.coverflow-arrow--prev { left: 4%; }
+.coverflow-arrow--next { right: 4%; }
+
+/* Ensure all carousel containers pass down the 100% height */
+.coverflow-panel .carousel,
+.coverflow-panel .carousel-track,
+.coverflow-panel .carousel-slide {
+  height: 100%;
+}
+
+/* Ensure card fills parent and displays background properly */
+.dash-highlight-card {
+  width: 100%;
+  height: 100%;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+
+/* Make sure title text is bright and visible */
+.dash-highlight-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: #ffffff;
+}
