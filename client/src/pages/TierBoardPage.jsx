@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
 import { useNavigate } from 'react-router-dom';
+import { MdSpaceDashboard } from 'react-icons/md';
 import { MdChatBubbleOutline, MdNotificationsNone, MdLogout, MdClose, MdChevronLeft, MdChevronRight } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
@@ -88,10 +89,6 @@ const TierBoardPage = () => {
   const [poolError, setPoolError] = useState('');
   const saveTimeout = useRef(null);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [friendsTab, setFriendsTab] = useState('friends'); // 'friends' | 'add' | 'requests'
-  const [chatFriend, setChatFriend] = useState(null); // null = list view, else = chat thread view
-  const [pendingCount, setPendingCount] = useState(0);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
@@ -103,12 +100,6 @@ const TierBoardPage = () => {
     return ids;
   }, [tiers]);
 
-  // --- Top-rated browsing, with pagination-based backfill -----------------
-  // Jikan/AniList return a fixed page size, not an arbitrary count, so we
-  // accumulate pages here and reveal up to `limit` unplaced items. As items
-  // get dragged into tiers they disappear from `visibleTop`, which drops
-  // below `limit` and triggers fetching the next page automatically --
-  // that's what makes "top 20" always show 20 even as you place anime.
   const [topPages, setTopPages] = useState([]);
   const [topPageCursor, setTopPageCursor] = useState(1);
   const [topHasNextPage, setTopHasNextPage] = useState(true);
@@ -121,14 +112,6 @@ const TierBoardPage = () => {
   const unplaced = topPages.filter((a) => !placedIds.has(a.id));
   return groupByFranchise(unplaced).slice(0, limit);
 }, [topPages, placedIds, limit]);
-const refreshPendingCount = () => {
-    axiosClient.get('/api/friends/requests').then((res) => setPendingCount(res.data.requests.length));
-  };
-  const openChat = (tab) => {
-    setChatFriend(null);
-    setFriendsTab(tab);
-    setChatOpen(true);
-  };
   useEffect(() => {
   if (mode !== 'top') return;
   if (visibleTopGroups.length >= limit) return;
@@ -296,32 +279,14 @@ const refreshPendingCount = () => {
           </div>
 
           <div className="tier-topbar-actions">
-            <button type="button" className="tier-icon-btn" onClick={() => openChat('friends')} aria-label="Chat">
-                <MdChatBubbleOutline size={20} />
-              </button>
-  
-              <button type="button" className="tier-icon-btn" onClick={() => openChat('requests')} aria-label="Notifications">
-                <MdNotificationsNone size={20} />
-                {pendingCount > 0 && <span className="tier-notif-badge">{pendingCount}</span>}
-              </button>
+             <button type="button" className="tier-icon-btn" onClick={() => navigate('/dashboard')} aria-label="Dashboard">
+               <MdSpaceDashboard size={20} />
+             </button>
             <div className="tier-profile">
-              <button
-                type="button"
-                className="tier-icon-btn"
-                onClick={() => setProfileOpen((open) => !open)}
-                aria-haspopup="menu"
-                aria-expanded={profileOpen}
-                aria-label="Profile"
-              >
+              <button type="button" className="tier-icon-btn" onClick={() => navigate('/profile')} aria-label="Profile">
                 <span className="tier-avatar tier-avatar--sm">{avatarLabel || 'U'}</span>
               </button>
-              {profileOpen && (
-                <div className="tier-menu" role="menu">
-                  <p className="tier-menu-greeting">Hi! {user?.username}</p>
-                </div>
-              )}
             </div>
-
             <button type="button" className="tier-icon-btn" onClick={handleLogout} aria-label="Logout">
               <MdLogout size={20} />
             </button>

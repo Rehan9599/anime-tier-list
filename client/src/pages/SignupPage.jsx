@@ -1,25 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import TierDemo from '../components/TierDemo';
 import '../styles/auth.css';
-
-const signupHighlights = [
-  {
-    label: 'Quick setup',
-    value: 'Build your profile in under a minute',
-    description: 'Create an account, save your preferences, and start ranking right away.',
-  },
-  {
-    label: 'Organized tiers',
-    value: 'Keep every anime in the right place',
-    description: 'Manage your favorites, re-order lists, and stay consistent across visits.',
-  },
-  {
-    label: 'Animated focus',
-    value: 'Motion that feels alive, not noisy',
-    description: 'Subtle floating lights and reveal timing add energy without distracting from the form.',
-  },
-];
 
 const SignupPage = () => {
   const [form, setForm] = useState({ username: '', email: '', password: '' });
@@ -49,23 +32,9 @@ const SignupPage = () => {
           <div className="auth-form-shell relative z-10">
             <span className="auth-kicker">Anime Tier List</span>
             <h2 className="auth-heading">
-              <span className="auth-heading-accent">Create your account</span> and start building
+              <span className="auth-heading-accent">Rank your anime.</span> Your rules.
             </h2>
-            <p className="auth-subheading">
-              Set up your profile once, then keep every favorite anime, tier decision, and saved list in one place.
-            </p>
-
-            <div className="auth-meta">
-              {signupHighlights.map((item, index) => (
-                <article key={item.label} className={`auth-meta-item auth-reveal auth-delay-${index + 1}`}>
-                  <div className="auth-meta-badge">0{index + 1}</div>
-                  <div>
-                    <p className="auth-meta-title">{item.value}</p>
-                    <p className="auth-meta-text">{item.description}</p>
-                  </div>
-                </article>
-              ))}
-            </div>
+            <TierDemo />
           </div>
         </section>
 

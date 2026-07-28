@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import FriendsSidebar from '../components/FriendsSidebar';
 import Carousel from '../components/Carousel';
 import PosterRow from '../components/PosterRow';
+import WatchedPromptGate from '../components/WatchedPromptGate';
 
 // Only anime is wired up for now. Adding movies/books later is just
 // flipping `active: true` here once their API routes exist -- the tier
@@ -129,7 +130,8 @@ axiosClient.get('/api/anime/top?page=1').then((res) =>
     .toUpperCase();
 
   return (
-    <div className={`app-shell ${chatOpen ? 'app-shell--chat-open' : ''}`}>
+    <div className={`tier-page ${chatOpen ? 'app-shell--chat-open' : ''}`}>
+      <WatchedPromptGate />
       <div className="app-main">
         <header className="tier-topbar">
           <div className="tier-brand">
@@ -151,21 +153,9 @@ axiosClient.get('/api/anime/top?page=1').then((res) =>
             </button>
 
             <div className="tier-profile">
-              <button
-                type="button"
-                className="tier-icon-btn"
-                onClick={() => setProfileOpen((open) => !open)}
-                aria-haspopup="menu"
-                aria-expanded={profileOpen}
-                aria-label="Profile"
-              >
+              <button type="button" className="tier-icon-btn" onClick={() => navigate('/profile')} aria-label="Profile">
                 <span className="tier-avatar tier-avatar--sm">{avatarLabel || 'U'}</span>
               </button>
-              {profileOpen && (
-                <div className="tier-menu" role="menu">
-                  <p className="tier-menu-greeting">Hi! {user?.username}</p>
-                </div>
-              )}
             </div>
 
             <button type="button" className="tier-icon-btn" onClick={handleLogout} aria-label="Logout">
@@ -229,11 +219,12 @@ axiosClient.get('/api/anime/top?page=1').then((res) =>
       </div>
 
       <div className={`chat-slide-panel ${chatOpen ? 'chat-slide-panel--open' : ''}`}>
-        <div className="chat-slide-panel-topbar">
-          <button type="button" className="tier-icon-btn" onClick={() => setChatOpen(false)} aria-label="Close">
-            <MdClose size={20} />
-          </button>
-        </div>
+  <div className="chat-slide-panel-topbar">
+    <span className="chat-slide-panel-title">{chatFriend ? '' : 'Social'}</span>
+    <button type="button" className="tier-icon-btn chat-slide-panel-close" onClick={() => setChatOpen(false)} aria-label="Close">
+      <MdClose size={20} />
+    </button>
+  </div>
         <FriendsSidebar
           tab={friendsTab}
           onTabChange={setFriendsTab}

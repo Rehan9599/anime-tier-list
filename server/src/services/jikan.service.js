@@ -20,7 +20,7 @@ const normalizeJikan = (anime) => ({
 const normalizeAniList = (media) => ({
   id: media.id,
   title: media.title.english || media.title.romaji,
-  imageUrl: media.coverImage?.large,
+  imageUrl: media.coverImage?.extraLarge || media.coverImage?.large || media.coverImage?.medium,
   score: media.averageScore ? media.averageScore / 10 : null,
   genres: media.genres || [],
 });
@@ -63,7 +63,7 @@ const topAnimeQuery = `
       media(sort: SCORE_DESC, type: ANIME) {
         id
         title { romaji english }
-        coverImage { large }
+        coverImage { extraLarge large medium }
         averageScore
         genres
       }
@@ -77,7 +77,7 @@ const searchAnimeQuery = `
       media(search: $search, type: ANIME) {
         id
         title { romaji english }
-        coverImage { large }
+        coverImage { extraLarge large medium }
         averageScore
         genres
       }
@@ -91,7 +91,7 @@ const trendingQuery = `
       media(sort: TRENDING_DESC, type: ANIME) {
         id
         title { romaji english }
-        coverImage { large }
+        coverImage { extraLarge large medium }
         averageScore
         genres
       }

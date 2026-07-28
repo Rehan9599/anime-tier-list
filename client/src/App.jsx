@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage.jsx';
 import TierBoardPage from './pages/TierBoardPage.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 import FriendTierListPage from './pages/FriendTierListPage.jsx';
+import ProfilePage from './pages/ProfilePage.jsx';
 
 function App() {
   return (
@@ -36,6 +37,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+      <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
     </Routes>
   );
 }
