@@ -23,6 +23,8 @@ import Message from './models/Message.js';
 import CommunitySession from './models/CommunitySession.js';
 import { areFriends, orderPair } from './utils/friendship.js';
 import watchedRoutes from './routes/watched.routes.js';
+import watchlistRoutes from './routes/watchlist.routes.js';
+// ...
 
 // Node defaults to trying IPv6 first for DNS lookups. On networks with
 // broken/slow IPv6 routing this makes outbound calls (e.g. to Jikan) hang
@@ -46,6 +48,7 @@ app.use('/api/friends', friendsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/community', communityRoutes);
 app.use('/api/watched', watchedRoutes);
+app.use('/api/watchlist', watchlistRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

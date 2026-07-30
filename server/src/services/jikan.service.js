@@ -20,7 +20,7 @@ const normalizeJikan = (anime) => ({
 const normalizeAniList = (media) => ({
   id: media.id,
   title: media.title.english || media.title.romaji,
-  imageUrl: media.coverImage?.extraLarge || media.coverImage?.large || media.coverImage?.medium,
+  imageUrl: media.coverImage?.large,
   score: media.averageScore ? media.averageScore / 10 : null,
   genres: media.genres || [],
 });
@@ -30,8 +30,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Jikan is an unofficial scraper in front of MyAnimeList and periodically
 // loses its connection to MAL (503/504, "Jikan failed to connect to
 // MyAnimeList"). This is a known, recurring issue on Jikan's side, not
-// something wrong with our request -- a short retry with backoff clears
-// most of these since the outages are usually seconds long.
+// something wrong with our request -- a short retry clears most of these
+// since the outages are usually seconds long. Kept short (1 retry) so a
+// real outage falls through to the AniList fallback quickly rather than
+// burning several seconds retrying a source that's actually down.
 const fetchWithRetry = async (url, params, retries = 1) => {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -50,11 +52,10 @@ const describeError = (err) =>
     ? `responded ${err.response.status}: ${JSON.stringify(err.response.data)}`
     : `${err.code || 'ERROR'}: ${err.message}`;
 
-// --- AniList fallback -------------------------------------------------
-// AniList is a first-party GraphQL API (not a scraper), so it's the
-// independent second source we fall back to when Jikan is degraded.
-// A real Jikan outage and a real AniList outage happening at the same
-// moment is very unlikely, which is the whole point of having two.
+const queryAniList = async (query, variables) => {
+  const { data } = await axios.post(ANILIST_URL, { query, variables }, { timeout: 8000, family: 4 });
+  return data.data.Page.media.map(normalizeAniList);
+};
 
 const topAnimeQuery = `
   query ($page: Int, $perPage: Int) {
@@ -63,7 +64,7 @@ const topAnimeQuery = `
       media(sort: SCORE_DESC, type: ANIME) {
         id
         title { romaji english }
-        coverImage { extraLarge large medium }
+        coverImage { large }
         averageScore
         genres
       }
@@ -77,7 +78,7 @@ const searchAnimeQuery = `
       media(search: $search, type: ANIME) {
         id
         title { romaji english }
-        coverImage { extraLarge large medium }
+        coverImage { large }
         averageScore
         genres
       }
@@ -91,7 +92,7 @@ const trendingQuery = `
       media(sort: TRENDING_DESC, type: ANIME) {
         id
         title { romaji english }
-        coverImage { extraLarge large medium }
+        coverImage { large }
         averageScore
         genres
       }
@@ -99,14 +100,20 @@ const trendingQuery = `
   }
 `;
 
-const queryAniList = async (query, variables) => {
-  const { data } = await axios.post(
-    ANILIST_URL,
-    { query, variables },
-    { timeout: 8000, family: 4 }
-  );
-  return data.data.Page.media.map(normalizeAniList);
-};
+const genreQuery = `
+  query ($genre: String, $page: Int, $perPage: Int) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo { hasNextPage }
+      media(genre: $genre, type: ANIME, sort: SCORE_DESC) {
+        id
+        title { romaji english }
+        coverImage { large }
+        averageScore
+        genres
+      }
+    }
+  }
+`;
 
 // --- Public API ---------------------------------------------------------
 
@@ -209,6 +216,54 @@ export const getTrendingAnime = async () => {
     }
 
     const friendly = new Error('Trending anime is temporarily unavailable. Please try again shortly.');
+    friendly.status = 503;
+    throw friendly;
+  }
+};
+
+// Jikan's /anime search endpoint filters by numeric MAL genre id (passed
+// in from anime.controller.js's GENRE_MAP); AniList's fallback filters by
+// the plain genre name string instead, which is why a wrong/uncertain ID
+// mapping in the controller can't break the fallback path.
+export const getAnimeByGenre = async (genreName, jikanGenreId, page = 1) => {
+  const cacheKey = `genre:${genreName}:${page}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const { data } = await fetchWithRetry(`${JIKAN_URL}/anime`, {
+      genres: jikanGenreId,
+      order_by: 'score',
+      sort: 'desc',
+      page,
+    });
+    const result = {
+      results: data.data.map(normalizeJikan),
+      hasNextPage: data.pagination?.has_next_page ?? false,
+    };
+    cache.set(cacheKey, result, 3600);
+    return result;
+  } catch (err) {
+    console.error(`[jikan] getAnimeByGenre(${genreName}) failed after retries:`, describeError(err));
+
+    try {
+      const { data } = await axios.post(
+        ANILIST_URL,
+        { query: genreQuery, variables: { genre: genreName, page, perPage: 25 } },
+        { timeout: 8000, family: 4 }
+      );
+      const result = {
+        results: data.data.Page.media.map(normalizeAniList),
+        hasNextPage: data.data.Page.pageInfo.hasNextPage,
+      };
+      cache.set(cacheKey, result, 900);
+      console.warn(`[jikan] Jikan is down, served genre "${genreName}" results from AniList instead`);
+      return result;
+    } catch (aniListErr) {
+      console.error('[anilist] genre fallback also failed:', describeError(aniListErr));
+    }
+
+    const friendly = new Error('Genre browsing is temporarily unavailable. Please try again shortly.');
     friendly.status = 503;
     throw friendly;
   }
