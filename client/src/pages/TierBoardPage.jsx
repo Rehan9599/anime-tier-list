@@ -9,6 +9,7 @@ import { groupByFranchise } from '../utils/franchise';
 import FriendsPanel from '../components/FriendsPanel';
 import FriendsSidebar from '../components/FriendsSidebar';
 import CardActionOverlay from '../components/CardActionOverlay';
+import { WatchStatusProvider } from '../context/WatchStatusContext';
 import '../styles/tierboard.css';
 
 const TIERS = ['S', 'A', 'B', 'C'];
@@ -365,6 +366,26 @@ const TierBoardPage = () => {
     navigate('/login');
   };
 
+  // Powers "already watched" / "on your watchlist" status shown in
+  // CardActionOverlay -- fetched once as plain ID sets (not full anime
+  // objects) so every card can check its own status with a Set.has()
+  // instead of each tap needing its own network round trip.
+  const [watchedIds, setWatchedIds] = useState(new Set());
+  const [watchlistIds, setWatchlistIds] = useState(new Set());
+
+  const refreshWatchStatus = useCallback(() => {
+    Promise.all([axiosClient.get('/api/watched'), axiosClient.get('/api/watchlist')]).then(
+      ([watchedRes, watchlistRes]) => {
+        setWatchedIds(new Set(watchedRes.data.items.map((i) => i.animeId)));
+        setWatchlistIds(new Set(watchlistRes.data.items.map((i) => i.animeId)));
+      }
+    );
+  }, []);
+
+  useEffect(() => {
+    refreshWatchStatus();
+  }, [refreshWatchStatus]);
+
   // Without an activation distance, dnd-kit's PointerSensor starts tracking
   // a potential drag on the very first pixel of movement -- and suppresses
   // the browser's normal click event even for a tap with zero movement.
@@ -391,7 +412,8 @@ const TierBoardPage = () => {
     .toUpperCase();
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <WatchStatusProvider value={{ watchedIds, watchlistIds, refresh: refreshWatchStatus }}>
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="tier-page">
         <header className="tier-topbar">
           <div className="tier-brand">
@@ -572,6 +594,7 @@ const TierBoardPage = () => {
         </div>
       </div>
     </DndContext>
+    </WatchStatusProvider>
   );
 };
 

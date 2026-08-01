@@ -1346,3 +1346,11 @@
 }
 .card-action-btn--primary { background: #f5a623; color: #15151c; border-color: transparent; }
 .card-action-message { margin: 0; font-size: 12px; font-weight: 700; color: #4ade80; text-align: center; padding: 8px 0; }
+.card-action-status {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: #f5a623;
+  text-align: center;
+  padding: 8px 0;
+}
