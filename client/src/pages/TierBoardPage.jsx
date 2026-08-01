@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { DndContext, useDraggable, useDroppable } from '@dnd-kit/core';
+import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { useNavigate } from 'react-router-dom';
 import { MdSpaceDashboard } from 'react-icons/md';
 import { MdChatBubbleOutline, MdNotificationsNone, MdLogout, MdClose, MdChevronLeft, MdChevronRight } from 'react-icons/md';
@@ -17,6 +17,18 @@ const TIER_STYLES = {
   A: 'tier-row--a',
   B: 'tier-row--b',
   C: 'tier-row--c',
+};
+
+// Up to this many cards fit at normal size in a tier row before shrinking
+// kicks in. Beyond that, cards shrink proportionally instead of wrapping
+// to a second line -- wrapping is what was growing the row's height and
+// pushing every tier below it further down the page. Floored at 45% so
+// cards never shrink into illegibility even with a very large tier.
+const COMFORTABLE_TIER_COUNT = 10;
+const MIN_CARD_SCALE = 0.45;
+const cardScale = (count) => {
+  if (count <= COMFORTABLE_TIER_COUNT) return 1;
+  return Math.max(MIN_CARD_SCALE, COMFORTABLE_TIER_COUNT / count);
 };
 
 // Kept in sync with GENRE_MAP in server/src/controllers/anime.controller.js --
@@ -85,10 +97,10 @@ const StackedCard = ({ group, expanded, onToggle }) => (
   </div>
 );
 
-const DropZone = ({ id, className, children }) => {
+const DropZone = ({ id, className, style, children }) => {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div ref={setNodeRef} className={`${className} ${isOver ? 'ring-2 ring-amber-300/50' : ''}`}>
+    <div ref={setNodeRef} style={style} className={`${className} ${isOver ? 'ring-2 ring-amber-300/50' : ''}`}>
       {children}
     </div>
   );
@@ -353,6 +365,19 @@ const TierBoardPage = () => {
     navigate('/login');
   };
 
+  // Without an activation distance, dnd-kit's PointerSensor starts tracking
+  // a potential drag on the very first pixel of movement -- and suppresses
+  // the browser's normal click event even for a tap with zero movement.
+  // Requiring 8px of movement before dnd-kit engages means a genuine tap
+  // passes through untouched (so CardActionOverlay's onClick actually
+  // fires), while real dragging is unaffected since it naturally involves
+  // far more than 8px of movement.
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 8 },
+    })
+  );
+
   const pool =
     mode === 'search' ? visibleSearch : mode === 'watched' ? visibleWatched : recommendations.filter((a) => !placedIds.has(a.id));
 
@@ -366,7 +391,7 @@ const TierBoardPage = () => {
     .toUpperCase();
 
   return (
-    <DndContext onDragEnd={handleDragEnd}>
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div className="tier-page">
         <header className="tier-topbar">
           <div className="tier-brand">
@@ -521,7 +546,11 @@ const TierBoardPage = () => {
                   <section key={t} className={`tier-section ${TIER_STYLES[t]}`}>
                     <div className="tier-row">
                       <div className="tier-row-label">{t}</div>
-                      <DropZone id={`tier-${t}`} className="tier-row-drop">
+                      <DropZone
+                        id={`tier-${t}`}
+                        className="tier-row-drop"
+                        style={{ '--card-scale': cardScale(tiers[t].length) }}
+                      >
                         {tiers[t].map((anime) => (
                           <CardActionOverlay
                             key={anime.animeId}

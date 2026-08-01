@@ -1,22 +1,56 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { MdClose } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
 
-// Wraps any existing card markup -- tapping anywhere on it opens a small
-// overlay with the two actions, without needing to touch the Card
-// component itself. Usage: <CardActionOverlay anime={anime}><Card .../></CardActionOverlay>
-//
-// This relies on click bubbling from the existing Card up to this
-// wrapper's onClick, which is separate from dnd-kit's drag listeners --
-// dnd-kit only treats a pointer-down as a drag once it's moved past its
-// activation threshold, so a genuine tap (no movement) still fires this
-// onClick normally. If tapping ever feels like it's fighting with
-// dragging in practice, that's the thing to look at first.
+const POPUP_WIDTH = 180;
+const SCREEN_MARGIN = 8;
+
+// Wraps any existing small card. Tapping it opens a genuinely bigger popup
+// card that floats ABOVE the tapped card, rendered via a portal into
+// document.body -- this is what makes it escape the tier row's horizontal
+// scroll container instead of getting clipped or stretched by it.
 const CardActionOverlay = ({ anime, children }) => {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
+  const [position, setPosition] = useState(null);
+  const wrapRef = useRef(null);
+  const popupRef = useRef(null);
+
+  const openPopup = () => {
+    if (wrapRef.current) {
+      const rect = wrapRef.current.getBoundingClientRect();
+      const idealLeft = rect.left + rect.width / 2;
+      // Clamp so the popup can't get clipped off the left/right edge of the screen.
+      const clampedLeft = Math.min(
+        Math.max(idealLeft, POPUP_WIDTH / 2 + SCREEN_MARGIN),
+        window.innerWidth - POPUP_WIDTH / 2 - SCREEN_MARGIN
+      );
+      setPosition({ left: clampedLeft, top: rect.top });
+    }
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e) => {
+      const clickedWrap = wrapRef.current && wrapRef.current.contains(e.target);
+      const clickedPopup = popupRef.current && popupRef.current.contains(e.target);
+      if (!clickedWrap && !clickedPopup) {
+        setOpen(false);
+        setMessage('');
+      }
+    };
+    document.addEventListener('pointerdown', handleOutside);
+    return () => document.removeEventListener('pointerdown', handleOutside);
+  }, [open]);
 
   const stop = (e) => e.stopPropagation();
+  const close = (e) => {
+    if (e) stop(e);
+    setOpen(false);
+    setMessage('');
+  };
 
   const markWatched = async (e) => {
     stop(e);
@@ -31,10 +65,7 @@ const CardActionOverlay = ({ anime, children }) => {
     } catch {
       setMessage('Could not save.');
     }
-    setTimeout(() => {
-      setOpen(false);
-      setMessage('');
-    }, 700);
+    setTimeout(close, 700);
   };
 
   const addToWatchlist = async (e) => {
@@ -49,43 +80,48 @@ const CardActionOverlay = ({ anime, children }) => {
     } catch {
       setMessage('Could not save.');
     }
-    setTimeout(() => {
-      setOpen(false);
-      setMessage('');
-    }, 700);
+    setTimeout(close, 700);
   };
 
   return (
-    <div className="card-action-wrap" onClick={() => setOpen((o) => !o)}>
+    <div className="card-action-wrap" ref={wrapRef} onClick={openPopup}>
       {children}
-      {open && (
-        <div className="card-action-overlay" onClick={stop}>
-          <button
-            type="button"
-            className="card-action-close"
-            onClick={(e) => {
-              stop(e);
-              setOpen(false);
-            }}
-            aria-label="Close"
-          >
-            <MdClose size={16} />
-          </button>
 
-          {message ? (
-            <p className="card-action-message">{message}</p>
-          ) : (
-            <div className="card-action-buttons">
-              <button type="button" className="card-action-btn" onClick={addToWatchlist}>
-                Add to watchlist
-              </button>
-              <button type="button" className="card-action-btn card-action-btn--primary" onClick={markWatched}>
-                Already watched
-              </button>
+      {open &&
+        position &&
+        createPortal(
+          <div
+            ref={popupRef}
+            className="card-action-popup"
+            style={{ left: position.left, top: position.top }}
+            onClick={stop}
+          >
+            <button type="button" className="card-action-close" onClick={close} aria-label="Close">
+              <MdClose size={16} />
+            </button>
+
+            <div className="card-action-image" style={{ backgroundImage: `url(${anime.imageUrl})` }} />
+
+            <div className="card-action-content">
+              {message ? (
+                <p className="card-action-message">{message}</p>
+              ) : (
+                <>
+                  <p className="card-action-title">{anime.title}</p>
+                  <div className="card-action-buttons">
+                    <button type="button" className="card-action-btn" onClick={addToWatchlist}>
+                      Watchlist
+                    </button>
+                    <button type="button" className="card-action-btn card-action-btn--primary" onClick={markWatched}>
+                      Watched
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
     </div>
   );
 };

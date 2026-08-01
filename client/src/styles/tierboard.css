@@ -369,11 +369,13 @@
 
 .tier-row-drop {
   flex: 1;
-  display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
-  min-height: 120px;
-  padding: 0.85rem;
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  min-height: 100px;
+  align-items: center;
+  padding: 0.75rem;
 }
 
 /* .tier-row--s .tier-row-label { background: linear-gradient(180deg, rgba(251, 113, 133, 0.24), rgba(251, 113, 133, 0.1)); }
@@ -569,31 +571,21 @@
 }
 
 .tier-card {
-  width: 5.25rem;
+  width: calc(4.5rem * var(--card-scale, 1));
   flex: none;
   cursor: grab;
   overflow: hidden;
-  border-radius: 18px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(18, 12, 26, 0.92);
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.22);
+  transition: width 0.2s ease;
 }
-
-.tier-card:active {
-  cursor: grabbing;
-}
-
-.tier-card img {
-  width: 100%;
-  height: 6rem;
-  object-fit: cover;
-}
-
+.tier-card:active { cursor: grabbing; }
+.tier-card img { width: 100%; height: calc(5rem * var(--card-scale, 1)); object-fit: cover; display: block; }
 .tier-card p {
-  padding: 0.45rem 0.5rem 0.55rem;
-  font-size: 0.65rem;
-  line-height: 1.2;
-  color: rgba(253, 244, 248, 0.9);
+  padding: 0.35rem 0.4rem 0.45rem; font-size: calc(0.62rem * var(--card-scale, 1)); line-height: 1.2;
+  color: rgba(253, 244, 248, 0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
 .tier-loading {
@@ -1263,3 +1255,94 @@
 
 .profile-content { padding: 24px clamp(1rem, 3vw, 2.5rem) 3rem; }
 .profile-watched-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; margin-top: 16px; }
+
+.profile-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+@media (max-width: 720px) { .profile-columns { grid-template-columns: 1fr; } }
+.profile-column { min-width: 0; }
+.profile-watched-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; margin-top: 12px; }
+.profile-poster-card {
+  position: relative; aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden;
+  background: #0c0c10; border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.profile-poster-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.profile-poster-card p {
+  position: absolute; bottom: 0; left: 0; right: 0; margin: 0; padding: 14px 6px 5px;
+  font-size: 10px; font-weight: 600; color: #fff;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.card-action-wrap {
+  position: relative;
+  flex: none;
+  cursor: pointer;
+}
+
+.card-action-popup {
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 12px)); /* centered on the card, sitting just above it */
+  z-index: 100;
+  width: 120px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #15151c;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.card-action-image {
+  width: 100%;
+  height: 120px;
+  background-size: cover;
+  background-position: center;
+}
+
+.card-action-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.card-action-content {
+  padding: 5px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #15151c;
+}
+.card-action-title {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-action-buttons { display: flex; gap: 6px; }
+.card-action-btn {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 4px 3px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.card-action-btn--primary { background: #f5a623; color: #15151c; border-color: transparent; }
+.card-action-message { margin: 0; font-size: 12px; font-weight: 700; color: #4ade80; text-align: center; padding: 8px 0; }
