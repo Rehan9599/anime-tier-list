@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import { SortableContext, useSortable, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useNavigate } from 'react-router-dom';
 import { MdSpaceDashboard } from 'react-icons/md';
 import { MdChatBubbleOutline, MdNotificationsNone, MdLogout, MdClose, MdChevronLeft, MdChevronRight, MdExpandMore } from 'react-icons/md';
@@ -59,6 +61,29 @@ const Card = ({ anime, containerId }) => {
 
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
+    opacity: isDragging ? 0.4 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className="tier-card">
+      <img src={anime.imageUrl} alt={anime.title} className="w-full h-24 object-cover" />
+      <p>{anime.title}</p>
+    </div>
+  );
+};
+
+// A sortable anime card inside tier rows supporting intra-tier & cross-tier reordering.
+const SortableCard = ({ anime, tier }) => {
+  const cardId = anime.animeId || anime.id;
+  const sortableId = `tier-${tier}:${cardId}`;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: sortableId,
+    data: { anime: { id: cardId, ...anime }, tier },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
     opacity: isDragging ? 0.4 : 1,
   };
 
@@ -336,28 +361,87 @@ const TierBoardPage = () => {
     const { active, over } = event;
     if (!over) return;
 
-    const anime = active.data.current.anime;
-    const destination = over.id; // 'tier-S' | 'tier-A' | 'tier-B' | 'tier-C' | 'pool'
+    const activeAnime = active.data.current?.anime;
+    if (!activeAnime) return;
+
+    const activeId = activeAnime.id || activeAnime.animeId;
+    const overId = String(over.id);
+
+    let destTier = null;
+    let targetAnimeId = null;
+
+    if (overId === 'pool') {
+      destTier = 'pool';
+    } else if (overId.startsWith('tier-')) {
+      const parts = overId.split(':');
+      destTier = parts[0].replace('tier-', '');
+      if (parts.length > 1) {
+        targetAnimeId = Number(parts[1]);
+      }
+    } else {
+      return;
+    }
 
     setTiers((prev) => {
-      const cleaned = Object.fromEntries(
-        TIERS.map((t) => [t, prev[t].filter((a) => a.animeId !== anime.id)])
-      );
+      let sourceTier = null;
+      for (const t of TIERS) {
+        if (prev[t].some((a) => a.animeId === activeId)) {
+          sourceTier = t;
+          break;
+        }
+      }
 
-      if (destination === 'pool') {
+      if (destTier === 'pool') {
+        if (!sourceTier) return prev;
+        const cleaned = {
+          ...prev,
+          [sourceTier]: prev[sourceTier].filter((a) => a.animeId !== activeId),
+        };
         scheduleSave(cleaned);
         return cleaned;
       }
 
-      if (!destination.startsWith('tier-')) return prev;
+      if (!TIERS.includes(destTier)) return prev;
 
-      const tierKey = destination.replace('tier-', '');
+      const itemToInsert = {
+        animeId: activeId,
+        title: activeAnime.title,
+        imageUrl: activeAnime.imageUrl,
+        genres: activeAnime.genres || [],
+        score: activeAnime.score ?? null,
+      };
+
+      if (sourceTier === destTier) {
+        const items = [...prev[destTier]];
+        const oldIndex = items.findIndex((a) => a.animeId === activeId);
+        let newIndex = targetAnimeId !== null ? items.findIndex((a) => a.animeId === targetAnimeId) : items.length - 1;
+
+        if (oldIndex === -1) return prev;
+        if (newIndex === -1) newIndex = items.length - 1;
+        if (oldIndex === newIndex) return prev;
+
+        const nextTierItems = arrayMove(items, oldIndex, newIndex);
+        const next = { ...prev, [destTier]: nextTierItems };
+        scheduleSave(next);
+        return next;
+      }
+
+      const cleaned = Object.fromEntries(
+        TIERS.map((t) => [t, prev[t].filter((a) => a.animeId !== activeId)])
+      );
+
+      const destItems = [...cleaned[destTier]];
+      let insertIndex = destItems.length;
+      if (targetAnimeId !== null) {
+        const foundIndex = destItems.findIndex((a) => a.animeId === targetAnimeId);
+        if (foundIndex !== -1) insertIndex = foundIndex;
+      }
+
+      destItems.splice(insertIndex, 0, itemToInsert);
+
       const next = {
         ...cleaned,
-        [tierKey]: [
-          ...cleaned[tierKey],
-          { animeId: anime.id, title: anime.title, imageUrl: anime.imageUrl, genres: anime.genres || [], score: anime.score ?? null },
-        ],
+        [destTier]: destItems,
       };
       scheduleSave(next);
       return next;
@@ -636,17 +720,22 @@ const TierBoardPage = () => {
                           className="tier-row-drop"
                           style={{ '--card-scale': cardScale(tiers[t].length) }}
                         >
-                          {tiers[t].map((anime) => (
-                            <CardActionOverlay
-                              key={anime.animeId}
-                              anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl, genres: anime.genres || [] }}
-                            >
-                              <Card
-                                anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl }}
-                                containerId={`tier-${t}`}
-                              />
-                            </CardActionOverlay>
-                          ))}
+                          <SortableContext
+                            items={tiers[t].map((anime) => `tier-${t}:${anime.animeId}`)}
+                            strategy={rectSortingStrategy}
+                          >
+                            {tiers[t].map((anime) => (
+                              <CardActionOverlay
+                                key={anime.animeId}
+                                anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl, genres: anime.genres || [] }}
+                              >
+                                <SortableCard
+                                  anime={anime}
+                                  tier={t}
+                                />
+                              </CardActionOverlay>
+                            ))}
+                          </SortableContext>
                         </DropZone>
                       </div>
                     </section>
