@@ -567,3 +567,17 @@
   from { opacity: 0; transform: translateY(-10px) scale(0.9); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
+
+
+@media (max-width: 900px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .auth-story { order: 1; }
+  .auth-card { order: 2; }
+  .auth-orb { display: none; } /* decorative background blobs only -- no text/content affected */
+
+  .tier-demo-row { min-height: 2.2rem; }
+  .tier-demo-label { width: 2rem; height: 2rem; font-size: 0.85rem; }
+}

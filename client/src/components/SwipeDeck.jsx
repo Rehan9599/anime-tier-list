@@ -27,6 +27,7 @@ const SwipeDeck = ({ items, onClose }) => {
         title: current.title,
         imageUrl: current.imageUrl,
         watched,
+        genres: current.genres || [],
       })
       .catch(() => {});
 

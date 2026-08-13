@@ -1354,3 +1354,102 @@
   text-align: center;
   padding: 8px 0;
 }
+
+.tier-filter-wrap { position: relative; }
+.tier-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tier-filter-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 40;
+  min-width: 390px;
+  padding: 12px;
+  border-radius: 16px;
+  background: #15151c;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tier-filter-section {
+  display: flex;
+  gap: 6px;
+}
+.tier-filter-subtags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+@media (max-width: 900px) {
+  /* Navbar */
+  .tier-topbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+  }
+  .tier-brand { justify-content: center; text-align: center; }
+  .tier-brand-subtitle { font-size: 0.72rem; }
+  .tier-topbar-actions { justify-content: center; }
+
+  /* Dashboard app shell + chat slide panel */
+  .app-shell--chat-open .app-main { margin-right: 0; }
+  .chat-slide-panel { width: 100vw; }
+  .dash-main-full { padding: 16px; }
+
+  /* Coverflow: only the center panel is usable at this width */
+  .coverflow { height: 280px; }
+  .coverflow-panel { width: 88%; }
+  .coverflow-panel--left,
+  .coverflow-panel--right {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(0) scale(0.8);
+  }
+  .coverflow-arrow { width: 34px; height: 34px; }
+
+  .dash-slide-row { flex-direction: column; }
+  .dash-category-grid { grid-template-columns: 1fr; }
+  .dash-stats { flex-direction: column; }
+
+  /* Profile page */
+  .profile-columns { grid-template-columns: 1fr; gap: 24px; }
+  .profile-content { padding: 16px; }
+
+  /* Tier board: stack the browse panel above the ranking panel */
+  .tier-dashboard { grid-template-columns: 1fr; gap: 0.75rem; }
+  .tier-panel--left { position: static; }
+  .tier-shell { padding: 0 0.5rem 1.5rem; }
+  .tier-page { --tier-chat-width: 100vw; }
+
+  /* Filter dropdown: cap width so it can't overflow a narrow screen */
+  .tier-filter-dropdown { min-width: 0; width: 90vw; max-width: 320px; }
+
+  /* Tier cards: shrink base size further so more fit without scrolling */
+  .tier-card { width: calc(3.75rem * var(--card-scale, 1)); }
+  .tier-card img { height: calc(4.25rem * var(--card-scale, 1)); }
+  .tier-row-label { width: 3.25rem; font-size: 0.9rem; }
+
+  /* Card action popup */
+  .card-action-popup { width: min(180px, 60vw); }
+  .card-action-image { height: 180px; }
+
+  /* Ranking head + email actions: stack instead of side-by-side */
+  .tier-ranking-head { grid-template-columns: 1fr; }
+  .tier-ranking-actions { justify-items: stretch; }
+  .tier-email-actions { flex-direction: column; align-items: stretch; }
+  .tier-email-input { width: 100%; }
+
+  .friends-sidebar-tabs { flex-wrap: wrap; }
+}
+
+
+
+/* for the mobile version lets do the tierboard in two parts, first just show this section and after tapping on any card give it a 4th option just on the mobile version in the left top corner as rate it after clicking that give it 4 buttons in a grid of 2x2 s,a,b,c and on clicking one , it would move that to its respective tier in list, and on thi spage just give another button around navbar 'view your list', now redirect and let the ranking be there  */

@@ -31,14 +31,14 @@ export const getPrompt = asyncHandler(async (req, res) => {
 });
 
 export const submitStatus = asyncHandler(async (req, res) => {
-  const { animeId, title, imageUrl, watched } = req.body;
+  const { animeId, title, imageUrl, watched, genres } = req.body;
   if (animeId == null || !title || typeof watched !== 'boolean') {
     return res.status(400).json({ message: 'animeId, title, and watched are required.' });
   }
 
   await WatchedStatus.findOneAndUpdate(
     { userId: req.userId, animeId },
-    { userId: req.userId, animeId, title, imageUrl, watched },
+    { userId: req.userId, animeId, title, imageUrl, watched, genres: genres || [] },
     { upsert: true, new: true }
   );
 
@@ -52,6 +52,7 @@ export const listWatched = asyncHandler(async (req, res) => {
       animeId: i.animeId,
       title: i.title,
       imageUrl: i.imageUrl,
+      genres: i.genres || [],
       watchedAt: i.createdAt,
     })),
   });

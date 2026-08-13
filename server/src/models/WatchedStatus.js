@@ -7,6 +7,10 @@ const watchedStatusSchema = new mongoose.Schema(
     title: { type: String, required: true },
     imageUrl: { type: String },
     watched: { type: Boolean, required: true },
+    // Used to let the tier board filter combine a "Watched" tag with genre
+    // tags (e.g. "Watched" + "Action") -- same pattern TierList already
+    // uses for its stored tier items.
+    genres: { type: [String], default: [] },
   },
   { timestamps: true }
 );

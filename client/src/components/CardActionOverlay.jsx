@@ -81,6 +81,7 @@ const CardActionOverlay = ({ anime, children }) => {
         title: anime.title,
         imageUrl: anime.imageUrl,
         watched: true,
+        genres: anime.genres || [],
       });
       setMessage('Marked as watched');
       refresh();
@@ -97,6 +98,7 @@ const CardActionOverlay = ({ anime, children }) => {
         animeId: anime.id,
         title: anime.title,
         imageUrl: anime.imageUrl,
+        genres: anime.genres || [],
       });
       setMessage('Added to watchlist');
       refresh();

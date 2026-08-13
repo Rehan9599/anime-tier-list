@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { DndContext, useDraggable, useDroppable, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { useNavigate } from 'react-router-dom';
 import { MdSpaceDashboard } from 'react-icons/md';
-import { MdChatBubbleOutline, MdNotificationsNone, MdLogout, MdClose, MdChevronLeft, MdChevronRight } from 'react-icons/md';
+import { MdChatBubbleOutline, MdNotificationsNone, MdLogout, MdClose, MdChevronLeft, MdChevronRight, MdExpandMore } from 'react-icons/md';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import { groupByFranchise } from '../utils/franchise';
@@ -32,9 +32,7 @@ const cardScale = (count) => {
   return Math.max(MIN_CARD_SCALE, COMFORTABLE_TIER_COUNT / count);
 };
 
-// Kept in sync with GENRE_MAP in server/src/controllers/anime.controller.js --
-// hardcoded here rather than fetched from /api/anime/genres so the picker
-// doesn't depend on guessing that endpoint's exact response shape.
+// Kept in sync with GENRE_MAP in server/src/controllers/anime.controller.js.
 const GENRES = [
   { key: 'action', label: 'Action' },
   { key: 'adventure', label: 'Adventure' },
@@ -49,6 +47,7 @@ const GENRES = [
   { key: 'sports', label: 'Sports' },
   { key: 'supernatural', label: 'Supernatural' },
 ];
+const GENRE_KEYS = new Set(GENRES.map((g) => g.key));
 
 // A draggable anime card. `containerId` just keeps dnd-kit ids unique
 // between the pool and the tier rows -- it isn't used for logic.
@@ -108,8 +107,7 @@ const DropZone = ({ id, className, style, children }) => {
 };
 
 const TierBoardPage = () => {
-  const [mode, setMode] = useState('top'); // 'top' | 'genre' | 'watched' | 'recommend' | 'search'
-  const [limit, setLimit] = useState(20);
+  const [mode, setMode] = useState('filter'); // 'filter' | 'recommend' | 'search'
   const [query, setQuery] = useState('');
   const [tiers, setTiers] = useState({ S: [], A: [], B: [], C: [] });
   const [expandedGroupKey, setExpandedGroupKey] = useState(null);
@@ -120,8 +118,20 @@ const TierBoardPage = () => {
   const [poolError, setPoolError] = useState('');
   const saveTimeout = useRef(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef(null);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+
+  // Closes the filter dropdown on a tap/click anywhere outside it.
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handleOutside = (e) => {
+      if (filterRef.current && !filterRef.current.contains(e.target)) setFilterOpen(false);
+    };
+    document.addEventListener('pointerdown', handleOutside);
+    return () => document.removeEventListener('pointerdown', handleOutside);
+  }, [filterOpen]);
 
   // Every anime.id currently sitting in a tier -- used to hide already-placed
   // cards from the browse/search pool so they don't show up twice.
@@ -131,37 +141,124 @@ const TierBoardPage = () => {
     return ids;
   }, [tiers]);
 
-  // Reset the expanded stack whenever you switch modes -- avoids a stale
-  // expanded group lingering visually across an unrelated mode switch.
   useEffect(() => {
     setExpandedGroupKey(null);
   }, [mode]);
 
-  // --- Top ---------------------------------------------------------
-  const [topPages, setTopPages] = useState([]);
-  const [topPageCursor, setTopPageCursor] = useState(1);
-  const [topHasNextPage, setTopHasNextPage] = useState(true);
-  const [topLoading, setTopLoading] = useState(false);
-  const topLoadingRef = useRef(false);
+  // --- Filter: Top-N size + combinable tags (genres, Watched, Watchlist) ---
+  const [limit, setLimit] = useState(20);
+  const [selectedTags, setSelectedTags] = useState(new Set());
 
-  const visibleTopGroups = useMemo(() => {
-    const unplaced = topPages.filter((a) => !placedIds.has(a.id));
-    return groupByFranchise(unplaced).slice(0, limit);
-  }, [topPages, placedIds, limit]);
+  const toggleTag = (tag) => {
+    setSelectedTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  };
+
+  // Stable-ordered (insertion order, which Sets guarantee) list of selected
+  // genre tags, separate from the special 'watched'/'watchlist' tags.
+  const genreTags = useMemo(() => [...selectedTags].filter((t) => GENRE_KEYS.has(t)), [selectedTags]);
+  const hasWatchedTag = selectedTags.has('watched');
+  const hasWatchlistTag = selectedTags.has('watchlist');
+
+  // Every result -- regardless of which source it came from -- passes
+  // through this before being shown, so combining tags always means AND
+  // (must match every selected genre), not OR.
+  const matchesAllGenres = useCallback(
+    (anime) => {
+      if (genreTags.length === 0) return true;
+      const animeGenres = (anime.genres || []).map((g) => g.toLowerCase());
+      return genreTags.every((g) => animeGenres.includes(g));
+    },
+    [genreTags]
+  );
+
+  const filterLabel = () => {
+    if (mode !== 'filter') return 'Filter';
+    const parts = [];
+    if (hasWatchedTag) parts.push('Watched');
+    if (hasWatchlistTag) parts.push('Watchlist');
+    genreTags.forEach((g) => parts.push(GENRES.find((x) => x.key === g)?.label || g));
+    if (parts.length === 0) return `Top ${limit}`;
+    return parts.join(' + ');
+  };
+
+  // --- Personal-list source: Watched and/or Watchlist tags -----------------
+  const [personalItems, setPersonalItems] = useState([]);
 
   useEffect(() => {
-    if (mode !== 'top') return;
-    if (visibleTopGroups.length >= limit) return;
-    if (!topHasNextPage || topLoadingRef.current) return;
-    if (topPageCursor > 8) return;
-    topLoadingRef.current = true;
-    setTopLoading(true);
+    if (mode !== 'filter' || (!hasWatchedTag && !hasWatchlistTag)) return;
+    setPoolError('');
+    const requests = [];
+    if (hasWatchedTag) requests.push(axiosClient.get('/api/watched'));
+    if (hasWatchlistTag) requests.push(axiosClient.get('/api/watchlist'));
+
+    Promise.all(requests)
+      .then((responses) => {
+        const seen = new Set();
+        const merged = [];
+        responses.forEach((res) => {
+          res.data.items.forEach((i) => {
+            if (!seen.has(i.animeId)) {
+              seen.add(i.animeId);
+              merged.push({ id: i.animeId, title: i.title, imageUrl: i.imageUrl, genres: i.genres || [] });
+            }
+          });
+        });
+        setPersonalItems(merged);
+      })
+      .catch((err) => setPoolError(err.response?.data?.message || 'Could not load your list.'));
+  }, [mode, hasWatchedTag, hasWatchlistTag]);
+
+  const visiblePersonal = useMemo(
+    () => personalItems.filter((a) => !placedIds.has(a.id) && matchesAllGenres(a)),
+    [personalItems, placedIds, matchesAllGenres]
+  );
+
+  // --- Browse source: Top-N or genre-anchored, paginated with backfill ----
+  const primaryGenre = genreTags[0] || null;
+
+  const [browsePages, setBrowsePages] = useState([]);
+  const [browsePageCursor, setBrowsePageCursor] = useState(1);
+  const [browseHasNextPage, setBrowseHasNextPage] = useState(true);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const browseLoadingRef = useRef(false);
+
+  // Resets pagination only when the PRIMARY genre changes (or toggles
+  // on/off) -- adding a second genre tag on top of an unchanged primary
+  // just narrows the client-side filter further, it doesn't need a refetch.
+  useEffect(() => {
+    setBrowsePages([]);
+    setBrowsePageCursor(1);
+    setBrowseHasNextPage(true);
+  }, [primaryGenre]);
+
+  const visibleBrowseGroups = useMemo(() => {
+    const unplaced = browsePages.filter((a) => !placedIds.has(a.id) && matchesAllGenres(a));
+    return groupByFranchise(unplaced).slice(0, limit);
+  }, [browsePages, placedIds, matchesAllGenres, limit]);
+
+  useEffect(() => {
+    if (mode !== 'filter' || hasWatchedTag || hasWatchlistTag) return;
+    if (visibleBrowseGroups.length >= limit) return;
+    if (!browseHasNextPage || browseLoadingRef.current) return;
+    if (browsePageCursor > 8) return;
+
+    browseLoadingRef.current = true;
+    setBrowseLoading(true);
+
+    const url = primaryGenre
+      ? `/api/anime/genre?genre=${encodeURIComponent(primaryGenre)}&page=${browsePageCursor}`
+      : `/api/anime/top?page=${browsePageCursor}`;
 
     axiosClient
-      .get(`/api/anime/top?page=${topPageCursor}`)
+      .get(url)
       .then((res) => {
         setPoolError('');
-        setTopPages((prev) => {
+        setBrowsePages((prev) => {
           const seen = new Set(prev.map((a) => a.id));
           const merged = [...prev];
           res.data.results.forEach((a) => {
@@ -169,93 +266,18 @@ const TierBoardPage = () => {
           });
           return merged;
         });
-        setTopHasNextPage(res.data.hasNextPage);
-        setTopPageCursor((p) => p + 1);
+        setBrowseHasNextPage(res.data.hasNextPage);
+        setBrowsePageCursor((p) => p + 1);
       })
       .catch((err) => {
         setPoolError(err.response?.data?.message || 'Could not load anime right now.');
-        setTopHasNextPage(false);
+        setBrowseHasNextPage(false);
       })
       .finally(() => {
-        topLoadingRef.current = false;
-        setTopLoading(false);
+        browseLoadingRef.current = false;
+        setBrowseLoading(false);
       });
-  }, [mode, visibleTopGroups.length, limit, topHasNextPage, topPageCursor]);
-
-  // --- Genre ---------------------------------------------------------
-  const [selectedGenre, setSelectedGenre] = useState(GENRES[0].key);
-  const [genrePages, setGenrePages] = useState([]);
-  const [genrePageCursor, setGenrePageCursor] = useState(1);
-  const [genreHasNextPage, setGenreHasNextPage] = useState(true);
-  const [genreLoading, setGenreLoading] = useState(false);
-  const genreLoadingRef = useRef(false);
-  const GENRE_LIMIT = 20;
-
-  // Switching genres restarts pagination from page 1 for the new genre --
-  // same idea as Top's pagination, just reset on every genre change.
-  useEffect(() => {
-    setGenrePages([]);
-    setGenrePageCursor(1);
-    setGenreHasNextPage(true);
-  }, [selectedGenre]);
-
-  const visibleGenreGroups = useMemo(() => {
-    const unplaced = genrePages.filter((a) => !placedIds.has(a.id));
-    return groupByFranchise(unplaced).slice(0, GENRE_LIMIT);
-  }, [genrePages, placedIds]);
-
-  useEffect(() => {
-    if (mode !== 'genre' || !selectedGenre) return;
-    if (visibleGenreGroups.length >= GENRE_LIMIT) return;
-    if (!genreHasNextPage || genreLoadingRef.current) return;
-    if (genrePageCursor > 8) return;
-    genreLoadingRef.current = true;
-    setGenreLoading(true);
-
-    axiosClient
-      .get(`/api/anime/genre?genre=${encodeURIComponent(selectedGenre)}&page=${genrePageCursor}`)
-      .then((res) => {
-        setPoolError('');
-        setGenrePages((prev) => {
-          const seen = new Set(prev.map((a) => a.id));
-          const merged = [...prev];
-          res.data.results.forEach((a) => {
-            if (!seen.has(a.id)) merged.push(a);
-          });
-          return merged;
-        });
-        setGenreHasNextPage(res.data.hasNextPage);
-        setGenrePageCursor((p) => p + 1);
-      })
-      .catch((err) => {
-        setPoolError(err.response?.data?.message || 'Could not load this genre right now.');
-        setGenreHasNextPage(false);
-      })
-      .finally(() => {
-        genreLoadingRef.current = false;
-        setGenreLoading(false);
-      });
-  }, [mode, selectedGenre, visibleGenreGroups.length, genreHasNextPage, genrePageCursor]);
-
-  // --- Watched ---------------------------------------------------------
-  const [watchedItems, setWatchedItems] = useState([]);
-
-  useEffect(() => {
-    if (mode !== 'watched') return;
-    setPoolError('');
-    axiosClient
-      .get('/api/watched')
-      .then((res) => {
-        // reshape animeId -> id so it matches the Card/pool shape used everywhere else
-        setWatchedItems(res.data.items.map((i) => ({ id: i.animeId, title: i.title, imageUrl: i.imageUrl })));
-      })
-      .catch((err) => setPoolError(err.response?.data?.message || 'Could not load your watched list.'));
-  }, [mode]);
-
-  const visibleWatched = useMemo(
-    () => watchedItems.filter((a) => !placedIds.has(a.id)),
-    [watchedItems, placedIds]
-  );
+  }, [mode, hasWatchedTag, hasWatchlistTag, visibleBrowseGroups.length, limit, browseHasNextPage, browsePageCursor, primaryGenre]);
 
   // --- Search ---------------------------------------------------------
   const [searchResults, setSearchResults] = useState([]);
@@ -367,9 +389,8 @@ const TierBoardPage = () => {
   };
 
   // Powers "already watched" / "on your watchlist" status shown in
-  // CardActionOverlay -- fetched once as plain ID sets (not full anime
-  // objects) so every card can check its own status with a Set.has()
-  // instead of each tap needing its own network round trip.
+  // CardActionOverlay -- fetched once as plain ID sets so every card can
+  // check its own status with a Set.has() instead of a network call per tap.
   const [watchedIds, setWatchedIds] = useState(new Set());
   const [watchlistIds, setWatchlistIds] = useState(new Set());
 
@@ -389,18 +410,13 @@ const TierBoardPage = () => {
   // Without an activation distance, dnd-kit's PointerSensor starts tracking
   // a potential drag on the very first pixel of movement -- and suppresses
   // the browser's normal click event even for a tap with zero movement.
-  // Requiring 8px of movement before dnd-kit engages means a genuine tap
-  // passes through untouched (so CardActionOverlay's onClick actually
-  // fires), while real dragging is unaffected since it naturally involves
-  // far more than 8px of movement.
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 8 },
     })
   );
 
-  const pool =
-    mode === 'search' ? visibleSearch : mode === 'watched' ? visibleWatched : recommendations.filter((a) => !placedIds.has(a.id));
+  const pool = mode === 'search' ? visibleSearch : recommendations.filter((a) => !placedIds.has(a.id));
 
   const displayName = user?.username || user?.email?.split('@')[0] || 'Profile';
   const avatarLabel = displayName
@@ -414,186 +430,233 @@ const TierBoardPage = () => {
   return (
     <WatchStatusProvider value={{ watchedIds, watchlistIds, refresh: refreshWatchStatus }}>
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-      <div className="tier-page">
-        <header className="tier-topbar">
-          <div className="tier-brand">
-            <div className="tier-brand-mark">◎</div>
-            <div className="tier-brand-copy">
-              <h1 className="tier-brand-title">Tier List Hub</h1>
-              <p className="tier-brand-subtitle">Your rankings, your rules.</p>
+        <div className="tier-page">
+          <header className="tier-topbar">
+            <div className="tier-brand">
+              <div className="tier-brand-mark">◎</div>
+              <div className="tier-brand-copy">
+                <h1 className="tier-brand-title">Tier List Hub</h1>
+                <p className="tier-brand-subtitle">Your rankings, your rules.</p>
+              </div>
             </div>
-          </div>
 
-          <div className="tier-topbar-actions">
-            <button type="button" className="tier-icon-btn" onClick={() => navigate('/dashboard')} aria-label="Dashboard">
-              <MdSpaceDashboard size={20} />
-            </button>
-            <div className="tier-profile">
-              <button type="button" className="tier-icon-btn" onClick={() => navigate('/profile')} aria-label="Profile">
-                <span className="tier-avatar tier-avatar--sm">{avatarLabel || 'U'}</span>
+            <div className="tier-topbar-actions">
+              <button type="button" className="tier-icon-btn" onClick={() => navigate('/dashboard')} aria-label="Dashboard">
+                <MdSpaceDashboard size={20} />
+              </button>
+              <div className="tier-profile">
+                <button type="button" className="tier-icon-btn" onClick={() => navigate('/profile')} aria-label="Profile">
+                  <span className="tier-avatar tier-avatar--sm">{avatarLabel || 'U'}</span>
+                </button>
+              </div>
+              <button type="button" className="tier-icon-btn" onClick={handleLogout} aria-label="Logout">
+                <MdLogout size={20} />
               </button>
             </div>
-            <button type="button" className="tier-icon-btn" onClick={handleLogout} aria-label="Logout">
-              <MdLogout size={20} />
-            </button>
-          </div>
-        </header>
+          </header>
 
-        <div className="tier-shell">
-          <main className="tier-dashboard">
-            <section className="tier-panel tier-panel--left">
-              <div className="tier-controls">
-                <button type="button" onClick={() => setMode('top')} className={`tier-control ${mode === 'top' ? 'is-active' : ''}`}>
-                  Top
-                </button>
-                <button type="button" onClick={() => setMode('genre')} className={`tier-control ${mode === 'genre' ? 'is-active' : ''}`}>
-                  Genre
-                </button>
-                <button type="button" onClick={() => setMode('watched')} className={`tier-control ${mode === 'watched' ? 'is-active' : ''}`}>
-                  Watched
-                </button>
-                <button type="button" onClick={() => setMode('recommend')} className={`tier-control ${mode === 'recommend' ? 'is-active' : ''}`}>
-                  Recommended
-                </button>
-                <button type="button" onClick={() => setMode('search')} className={`tier-control ${mode === 'search' ? 'is-active' : ''}`}>
-                  Search
-                </button>
-              </div>
-
-              {mode === 'top' && (
-                <div className="tier-controls tier-controls--sub">
-                  {[20, 30, 50].map((n) => (
+          <div className="tier-shell">
+            <main className="tier-dashboard">
+              <section className="tier-panel tier-panel--left">
+                <div className="tier-controls">
+                  <div className="tier-filter-wrap" ref={filterRef}>
                     <button
-                      key={n}
                       type="button"
-                      onClick={() => setLimit(n)}
-                      className={`tier-control tier-control--sub ${limit === n ? 'is-active' : ''}`}
+                      onClick={() => setFilterOpen((o) => !o)}
+                      className={`tier-control tier-filter-btn ${mode === 'filter' ? 'is-active' : ''}`}
                     >
-                      Top {n}
+                      {filterLabel()}
+                      <MdExpandMore size={16} />
                     </button>
-                  ))}
+
+                    {filterOpen && (
+                      <div className="tier-filter-dropdown">
+                        <div className="tier-filter-section">
+                          <span className="tier-filter-heading">Show</span>
+                          <div className="tier-filter-subtags">
+                            {[20, 30, 50].map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => {
+                                  setMode('filter');
+                                  setLimit(n);
+                                }}
+                                className={`tier-control tier-control--sub ${mode === 'filter' && limit === n ? 'is-active' : ''}`}
+                              >
+                                Top {n}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="tier-filter-section">
+                          <span className="tier-filter-heading">Tags</span>
+                          <div className="tier-filter-subtags">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMode('filter');
+                                toggleTag('watched');
+                              }}
+                              className={`tier-control tier-control--sub ${hasWatchedTag ? 'is-active' : ''}`}
+                            >
+                              Watched
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMode('filter');
+                                toggleTag('watchlist');
+                              }}
+                              className={`tier-control tier-control--sub ${hasWatchlistTag ? 'is-active' : ''}`}
+                            >
+                              Watchlist
+                            </button>
+                            {GENRES.map((g) => (
+                              <button
+                                key={g.key}
+                                type="button"
+                                onClick={() => {
+                                  setMode('filter');
+                                  toggleTag(g.key);
+                                }}
+                                className={`tier-control tier-control--sub ${selectedTags.has(g.key) ? 'is-active' : ''}`}
+                              >
+                                {g.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('recommend');
+                      setFilterOpen(false);
+                    }}
+                    className={`tier-control ${mode === 'recommend' ? 'is-active' : ''}`}
+                  >
+                    Recommended
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('search');
+                      setFilterOpen(false);
+                    }}
+                    className={`tier-control ${mode === 'search' ? 'is-active' : ''}`}
+                  >
+                    Search
+                  </button>
                 </div>
-              )}
 
-              {mode === 'genre' && (
-                <div className="tier-controls tier-controls--sub">
-                  {GENRES.map((g) => (
-                    <button
-                      key={g.key}
-                      type="button"
-                      onClick={() => setSelectedGenre(g.key)}
-                      className={`tier-control tier-control--sub ${selectedGenre === g.key ? 'is-active' : ''}`}
-                    >
-                      {g.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+                {mode === 'search' && (
+                  <input
+                    className="tier-search"
+                    placeholder="Search anime by name..."
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                  />
+                )}
+                {mode === 'recommend' && basedOnGenres.length > 0 && (
+                  <p className="tier-muted">Based on your S/A picks: {basedOnGenres.join(', ')}</p>
+                )}
 
-              {mode === 'search' && (
-                <input
-                  className="tier-search"
-                  placeholder="Search anime by name..."
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              )}
-              {mode === 'recommend' && basedOnGenres.length > 0 && (
-                <p className="tier-muted">Based on your S/A picks: {basedOnGenres.join(', ')}</p>
-              )}
+                {poolError && <p className="tier-error">{poolError}</p>}
 
-              {poolError && <p className="tier-error">{poolError}</p>}
+                <DropZone id="pool" className="tier-pool">
+                  {mode === 'filter' &&
+                    (hasWatchedTag || hasWatchlistTag) &&
+                    visiblePersonal.map((anime) => (
+                      <CardActionOverlay key={anime.id} anime={anime}>
+                        <Card anime={anime} containerId="pool" />
+                      </CardActionOverlay>
+                    ))}
+                  {mode === 'filter' &&
+                    !hasWatchedTag &&
+                    !hasWatchlistTag &&
+                    visibleBrowseGroups.map((group) => (
+                      <StackedCard
+                        key={group.key}
+                        group={group}
+                        expanded={expandedGroupKey === group.key}
+                        onToggle={() => setExpandedGroupKey((k) => (k === group.key ? null : group.key))}
+                      />
+                    ))}
+                  {(mode === 'search' || mode === 'recommend') &&
+                    pool.map((anime) => (
+                      <CardActionOverlay key={anime.id} anime={anime}>
+                        <Card anime={anime} containerId="pool" />
+                      </CardActionOverlay>
+                    ))}
+                  {mode === 'filter' && !hasWatchedTag && !hasWatchlistTag && browseLoading && (
+                    <p className="tier-loading">Loading more…</p>
+                  )}
+                </DropZone>
+              </section>
 
-              <DropZone id="pool" className="tier-pool">
-                {mode === 'top' &&
-                  visibleTopGroups.map((group) => (
-                    <StackedCard
-                      key={group.key}
-                      group={group}
-                      expanded={expandedGroupKey === group.key}
-                      onToggle={() => setExpandedGroupKey((k) => (k === group.key ? null : group.key))}
-                    />
-                  ))}
-                {mode === 'genre' &&
-                  visibleGenreGroups.map((group) => (
-                    <StackedCard
-                      key={group.key}
-                      group={group}
-                      expanded={expandedGroupKey === group.key}
-                      onToggle={() => setExpandedGroupKey((k) => (k === group.key ? null : group.key))}
-                    />
-                  ))}
-                {(mode === 'search' || mode === 'watched' || mode === 'recommend') &&
-                  pool.map((anime) => (
-                    <CardActionOverlay key={anime.id} anime={anime}>
-                      <Card anime={anime} containerId="pool" />
-                    </CardActionOverlay>
-                  ))}
-                {mode === 'top' && topLoading && <p className="tier-loading">Loading more…</p>}
-                {mode === 'genre' && genreLoading && <p className="tier-loading">Loading more…</p>}
-              </DropZone>
-            </section>
+              <section className="tier-ranking-panel">
+                <div className="tier-ranking-head">
+                  <div className="tier-ranking-copy">
+                    <p className="tier-ranking-kicker">Tier ranking</p>
+                    <h2 className="tier-ranking-title">Arrange the lineup</h2>
+                    <span className="tier-muted tier-ranking-subtitle">
+                      {mode === 'filter' && `Browsing: ${filterLabel()}`}
+                      {mode === 'recommend' && 'Picked based on your S/A tier'}
+                      {mode === 'search' && 'Search for any anime title'}
+                    </span>
+                  </div>
 
-            <section className="tier-ranking-panel">
-              <div className="tier-ranking-head">
-                <div className="tier-ranking-copy">
-                  <p className="tier-ranking-kicker">Tier ranking</p>
-                  <h2 className="tier-ranking-title">Arrange the lineup</h2>
-                  <span className="tier-muted tier-ranking-subtitle">
-                    {mode === 'top' && 'Browse the top ranked series'}
-                    {mode === 'genre' && `Browsing ${GENRES.find((g) => g.key === selectedGenre)?.label || 'a genre'}`}
-                    {mode === 'watched' && "Anime you've already watched"}
-                    {mode === 'recommend' && 'Picked based on your S/A tier'}
-                    {mode === 'search' && 'Search for any anime title'}
-                  </span>
-                </div>
-
-                <div className="tier-ranking-actions">
-                  <div className="tier-email-actions">
-                    <input
-                      type="text"
-                      placeholder="Friend's email (optional)"
-                      value={recipientsInput}
-                      onChange={(e) => setRecipientsInput(e.target.value)}
-                      className="tier-email-input"
-                    />
-                    <button type="button" onClick={handleEmail} disabled={emailStatus === 'sending'} className="tier-email-button">
-                      {emailStatus === 'sending' ? 'Sending…' : 'Email list'}
-                    </button>
+                  <div className="tier-ranking-actions">
+                    <div className="tier-email-actions">
+                      <input
+                        type="text"
+                        placeholder="Friend's email (optional)"
+                        value={recipientsInput}
+                        onChange={(e) => setRecipientsInput(e.target.value)}
+                        className="tier-email-input"
+                      />
+                      <button type="button" onClick={handleEmail} disabled={emailStatus === 'sending'} className="tier-email-button">
+                        {emailStatus === 'sending' ? 'Sending…' : 'Email list'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="tier-ranking-stack">
-                {TIERS.map((t) => (
-                  <section key={t} className={`tier-section ${TIER_STYLES[t]}`}>
-                    <div className="tier-row">
-                      <div className="tier-row-label">{t}</div>
-                      <DropZone
-                        id={`tier-${t}`}
-                        className="tier-row-drop"
-                        style={{ '--card-scale': cardScale(tiers[t].length) }}
-                      >
-                        {tiers[t].map((anime) => (
-                          <CardActionOverlay
-                            key={anime.animeId}
-                            anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl }}
-                          >
-                            <Card
-                              anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl }}
-                              containerId={`tier-${t}`}
-                            />
-                          </CardActionOverlay>
-                        ))}
-                      </DropZone>
-                    </div>
-                  </section>
-                ))}
-              </div>
-            </section>
-          </main>
+                <div className="tier-ranking-stack">
+                  {TIERS.map((t) => (
+                    <section key={t} className={`tier-section ${TIER_STYLES[t]}`}>
+                      <div className="tier-row">
+                        <div className="tier-row-label">{t}</div>
+                        <DropZone
+                          id={`tier-${t}`}
+                          className="tier-row-drop"
+                          style={{ '--card-scale': cardScale(tiers[t].length) }}
+                        >
+                          {tiers[t].map((anime) => (
+                            <CardActionOverlay
+                              key={anime.animeId}
+                              anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl, genres: anime.genres || [] }}
+                            >
+                              <Card
+                                anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl }}
+                                containerId={`tier-${t}`}
+                              />
+                            </CardActionOverlay>
+                          ))}
+                        </DropZone>
+                      </div>
+                    </section>
+                  ))}
+                </div>
+              </section>
+            </main>
+          </div>
         </div>
-      </div>
-    </DndContext>
+      </DndContext>
     </WatchStatusProvider>
   );
 };

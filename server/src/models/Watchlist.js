@@ -6,6 +6,7 @@ const watchlistSchema = new mongoose.Schema(
     animeId: { type: Number, required: true },
     title: { type: String, required: true },
     imageUrl: { type: String },
+    genres: { type: [String], default: [] },
   },
   { timestamps: true }
 );
