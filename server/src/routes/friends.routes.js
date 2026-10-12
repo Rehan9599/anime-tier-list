@@ -11,10 +11,15 @@ import { protect } from '../middleware/auth.middleware.js';
 
 // Blunts both accidental hammering and brute-force-y spamming of requests.
 const requestLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
-
+const searchLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 const router = Router();
 
-router.get('/search', protect, searchUsers);
+router.get('/search', protect,searchLimiter, searchUsers);
 router.post('/request', protect, requestLimiter, sendRequest);
 router.get('/requests', protect, listIncomingRequests);
 router.post('/requests/:requestId/respond', protect, respondToRequest);

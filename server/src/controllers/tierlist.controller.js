@@ -5,19 +5,106 @@ import { sendTierListEmail } from '../services/email.service.js';
 import { getTopAnime } from '../services/jikan.service.js';
 import { recommend } from '../services/recommend.service.js';
 import { areFriends } from '../utils/friendship.js';
+import mongoose from 'mongoose';
+
+const TIER_NAMES = ['S', 'A', 'B', 'C'];
+const MAX_ITEMS_PER_TIER = 60;
+const MAX_TOTAL_ITEMS = 240;
+
+
+const validateTiers = (tiers) => {
+  if (!tiers || typeof tiers !== 'object' || Array.isArray(tiers)) {
+    return 'tiers must be an object';
+  }
+  const seenAnimeIds = new Set();
+  const unexpectedTiers = Object.keys(tiers).filter((key) => !TIER_NAMES.includes(key));
+  if (unexpectedTiers.length) {
+    return 'tiers contains an unsupported tier';
+  }
+
+  let totalItems = 0;
+
+  for (const tierName of TIER_NAMES) {
+    const items = tiers[tierName];
+
+    if (!Array.isArray(items)) {
+      return `${tierName} tier must be an array`;
+    }
+
+    if (items.length > MAX_ITEMS_PER_TIER) {
+      return `${tierName} tier cannot contain more than ${MAX_ITEMS_PER_TIER} items`;
+    }
+
+    totalItems += items.length;
+
+    for (const item of items) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return `${tierName} tier contains an invalid item`;
+      }
+
+      if (!Number.isInteger(item.animeId) || item.animeId < 1) {
+        return `${tierName} tier contains an invalid animeId`;
+      }
+
+      if (typeof item.title !== 'string' || item.title.trim().length === 0 || item.title.length > 200) {
+        return `${tierName} tier contains an invalid title`;
+      }
+
+      if (item.imageUrl !== undefined && typeof item.imageUrl !== 'string') {
+        return `${tierName} tier contains an invalid imageUrl`;
+      }
+
+      if (item.genres !== undefined) {
+        if (
+          !Array.isArray(item.genres) ||
+          item.genres.length > 30 ||
+          item.genres.some((genre) => typeof genre !== 'string' || genre.length > 80)
+        ) {
+          return `${tierName} tier contains invalid genres`;
+        }
+      }
+
+      if (
+        item.score !== undefined &&
+        item.score !== null &&
+        (typeof item.score !== 'number' || item.score < 0 || item.score > 10)
+      ) {
+        return `${tierName} tier contains an invalid score`;
+      }
+      if (seenAnimeIds.has(item.animeId)) {
+        return 'An anime cannot appear more than once in a tier list';
+      }
+
+      seenAnimeIds.add(item.animeId);
+    }
+  }
+
+  if (totalItems > MAX_TOTAL_ITEMS) {
+    return `A tier list cannot contain more than ${MAX_TOTAL_ITEMS} items`;
+  }
+
+  return null;
+};
+
 
 export const getTierList = asyncHandler(async (req, res) => {
   const category = req.query.category || 'anime';
-  let tierList = await TierList.findOne({ userId: req.userId, category });
-  if (!tierList) {
-    tierList = await TierList.create({ userId: req.userId, category });
-  }
-  res.json({ tierList });
+  const tierList = await TierList.findOne({ userId: req.userId, category });
+  const responseTierList = tierList || {
+    userId: req.userId,
+    category,
+    tiers: { S: [], A: [], B: [], C: [] },
+  };
+  res.json({ tierList: responseTierList });
 });
 
 export const getFriendTierList = asyncHandler(async (req, res) => {
   const { friendId } = req.params;
   const category = req.query.category || 'anime';
+
+  if (!mongoose.Types.ObjectId.isValid(friendId)) {
+    return res.status(400).json({ message: 'Invalid friend ID.' });
+  }
 
   if (friendId !== String(req.userId) && !(await areFriends(req.userId, friendId))) {
     return res.status(403).json({ message: 'You can only view a friend’s tier list.' });
@@ -26,11 +113,10 @@ export const getFriendTierList = asyncHandler(async (req, res) => {
   const friend = await User.findById(friendId);
   if (!friend) return res.status(404).json({ message: 'Friend not found' });
 
-  const tierList =
-    (await TierList.findOne({ userId: friendId, category })) ||
-    (await TierList.create({ userId: friendId, category }));
+  const tierList = await TierList.findOne({ userId: friendId, category });
+  const tiers = tierList?.tiers || { S: [], A: [], B: [], C: [] };
 
-  res.json({ friendUsername: friend.username, tiers: tierList.tiers });
+  res.json({ friendUsername: friend.username, tiers });
 });
 
 // Frontend always sends the *complete* current state of all four tiers,
@@ -39,6 +125,15 @@ export const getFriendTierList = asyncHandler(async (req, res) => {
 export const saveTierList = asyncHandler(async (req, res) => {
   const { category = 'anime', tiers } = req.body;
   if (!tiers) return res.status(400).json({ message: 'tiers object is required' });
+
+  if (category !== 'anime') {
+    return res.status(400).json({ message: 'Unsupported category.' });
+  }
+
+  const validationError = validateTiers(tiers);
+  if (validationError) {
+    return res.status(400).json({ message: validationError });
+  }
 
   const tierList = await TierList.findOneAndUpdate(
     { userId: req.userId, category },

@@ -28,15 +28,45 @@ const ProfilePage = () => {
   const [watched, setWatched] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  const [profileError, setProfileError] = useState('');
   useEffect(() => {
-    Promise.all([axiosClient.get('/api/watched'), axiosClient.get('/api/watchlist')]).then(
-      ([watchedRes, watchlistRes]) => {
-        setWatched(watchedRes.data.items);
-        setWatchlist(watchlistRes.data.items);
-        setLoading(false);
+    let mounted = true;
+
+    const loadProfileData = async () => {
+      setLoading(true);
+      setProfileError('');
+
+      const results = await Promise.allSettled([
+        axiosClient.get('/api/watched'),
+        axiosClient.get('/api/watchlist'),
+      ]);
+
+      if (!mounted) return;
+
+      const [watchedResult, watchlistResult] = results;
+
+      if (watchedResult.status === 'fulfilled') {
+        setWatched(watchedResult.value.data.items);
       }
-    );
+
+      if (watchlistResult.status === 'fulfilled') {
+        setWatchlist(watchlistResult.value.data.items);
+      }
+
+      if (results.some((result) => result.status === 'rejected')) {
+        setProfileError(
+          'Some profile data could not be loaded. Please try again.'
+        );
+      }
+
+      setLoading(false);
+    };
+
+    loadProfileData();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   return (
@@ -61,6 +91,11 @@ const ProfilePage = () => {
       </header>
 
       <div className="profile-content">
+        {profileError && (
+          <p className="tier-error" role="alert">
+            {profileError}
+          </p>
+        )}
         {loading ? (
           <p className="tier-muted">Loading...</p>
         ) : (

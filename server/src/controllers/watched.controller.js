@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 
 const PROMPT_SIZE = 10;
 const MAX_PAGES = 8;
+const PAGE_BATCH_SIZE = 4;
 
 export const getPrompt = asyncHandler(async (req, res) => {
   const asked = await WatchedStatus.find({ userId: req.userId }).select('animeId');
@@ -11,20 +12,30 @@ export const getPrompt = asyncHandler(async (req, res) => {
 
   const candidates = [];
   const seenIds = new Set();
-  let page = 1;
+  let nextPage = 1;
   let hasNextPage = true;
 
-  while (candidates.length < PROMPT_SIZE && hasNextPage && page <= MAX_PAGES) {
-    const result = await getTopAnime(page);
-    hasNextPage = result.hasNextPage;
-    for (const anime of result.results) {
-      if (!askedIds.has(anime.id) && !seenIds.has(anime.id)) {
-        seenIds.add(anime.id);
-        candidates.push(anime);
+  while (candidates.length < PROMPT_SIZE && hasNextPage && nextPage <= MAX_PAGES) {
+    const pages = Array.from(
+      { length: Math.min(PAGE_BATCH_SIZE, MAX_PAGES - nextPage + 1) },
+      (_, index) => nextPage + index
+    );
+    const results = await Promise.allSettled(pages.map((page) => getTopAnime(page)));
+
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+
+      hasNextPage = result.value.hasNextPage;
+      for (const anime of result.value.results) {
+        if (!askedIds.has(anime.id) && !seenIds.has(anime.id)) {
+          seenIds.add(anime.id);
+          candidates.push(anime);
+        }
+        if (candidates.length >= PROMPT_SIZE) break;
       }
-      if (candidates.length >= PROMPT_SIZE) break;
     }
-    page++;
+
+    nextPage += pages.length;
   }
 
   res.json({ items: candidates.slice(0, PROMPT_SIZE) });

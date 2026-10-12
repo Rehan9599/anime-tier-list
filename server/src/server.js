@@ -4,7 +4,7 @@ import http from 'node:http';
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
-import cookie from 'cookie';
+import * as cookie from 'cookie';
 import jwt from 'jsonwebtoken';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
@@ -33,13 +33,13 @@ import watchlistRoutes from './routes/watchlist.routes.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
-
+app.set('trust proxy', 1);
 app.use(cors({ origin: process.env.CLIENT_URL, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 app.use(cookieParser());
 if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
+const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders:false });
 
 // Session checks are made during every auth bootstrap and are read-only. Rate
 // limit only credential-bearing mutations so an expired session cannot turn

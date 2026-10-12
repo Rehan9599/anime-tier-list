@@ -29,12 +29,34 @@ const FriendsSidebar = ({
   const [requests, setRequests] = useState([]);
   const [friends, setFriends] = useState([]);
   const [message, setMessage] = useState('');
-
+  const [requestsError, setRequestsError] = useState('');
+  const [friendsError, setFriendsError] = useState('');
+  const [searchError, setSearchError] = useState('');
   const loadRequests = useCallback(() => {
-    axiosClient.get('/api/friends/requests').then((res) => setRequests(res.data.requests));
+    return axiosClient
+      .get('/api/friends/requests')
+      .then((res) => {
+        setRequests(res.data.requests);
+        setRequestsError('');
+      })
+      .catch((err) => {
+        setRequestsError(
+          err.response?.data?.message || 'Could not load friend requests.'
+        );
+      });
   }, []);
   const loadFriends = useCallback(() => {
-    axiosClient.get('/api/friends').then((res) => setFriends(res.data.friends));
+    return axiosClient
+      .get('/api/friends')
+      .then((res) => {
+        setFriends(res.data.friends);
+        setFriendsError('');
+      })
+      .catch((err) => {
+        setFriendsError(
+          err.response?.data?.message || 'Could not load your friends.'
+        );
+      });
   }, []);
 
   useEffect(() => {
@@ -45,12 +67,28 @@ const FriendsSidebar = ({
   useEffect(() => {
     if (tab !== 'add' || query.trim().length < 2) {
       setResults([]);
+      setSearchError('');
       return;
     }
     const t = setTimeout(() => {
       axiosClient
-        .get(`/api/friends/search?q=${encodeURIComponent(query)}`)
-        .then((res) => setResults(res.data.users));
+        .get(`/api/friends/search?q=${encodeURIComponent(query.trim())}`)
+        .then((res) => {
+          setResults(res.data.users);
+          setSearchError('');
+        })
+        .catch((err) => {
+          if (
+            err.name === 'CanceledError' ||
+            err.code === 'ERR_CANCELED'
+          ) {
+            return;
+          }
+          setResults([]);
+          setSearchError(
+            err.response?.data?.message || 'Could not search for friends.'
+          );
+        });
     }, 300);
     return () => clearTimeout(t);
   }, [tab, query]);
@@ -112,7 +150,16 @@ const FriendsSidebar = ({
       </div>
 
       {message && <p className="tier-error">{message}</p>}
-
+      {requestsError && (
+        <p className="tier-error" role="alert">
+          {requestsError}
+        </p>
+      )}
+      {friendsError && (
+        <p className="tier-error" role="alert">
+          {friendsError}
+        </p>
+      )}
       {tab === 'add' && (
         <div className="friends-sidebar-body">
           <input
@@ -121,6 +168,11 @@ const FriendsSidebar = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
+          {searchError && (
+            <p className="tier-error" role="alert">
+              {searchError}
+            </p>
+          )}
           <ul className="tier-friend-list">
             {results.map((u) => (
               <li key={u.id} className="tier-friend-row">

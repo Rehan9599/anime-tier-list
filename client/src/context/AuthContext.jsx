@@ -1,12 +1,12 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import axiosClient from '../api/axiosClient';
-
+import socket from '../socket';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-
+  
   // Session lives in an httpOnly cookie, so we just ask the API who we are
   // on mount rather than storing anything ourselves.
   useEffect(() => {
@@ -16,7 +16,21 @@ export const AuthProvider = ({ children }) => {
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+  useEffect(() => {
+    if (loading) return;
 
+    if (user) {
+      if (!socket.connected) {
+        socket.connect();
+      }
+    } else {
+      socket.disconnect();
+    }
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [user, loading]);
   const signup = async (payload) => {
     const res = await axiosClient.post('/api/auth/signup', payload);
     setUser(res.data.user);
@@ -28,8 +42,12 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    await axiosClient.post('/api/auth/logout');
-    setUser(null);
+    try {
+      await axiosClient.post('/api/auth/logout');
+    } finally {
+      socket.disconnect();
+      setUser(null);
+    }
   };
 
   return (

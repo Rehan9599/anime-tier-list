@@ -3,16 +3,23 @@ import FriendRequest from '../models/FriendRequest.js';
 import User from '../models/User.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { orderPair, areFriends } from '../utils/friendship.js';
-
+import mongoose from 'mongoose';
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Search by username, annotated with the current relationship so the
 // frontend can show the right button (Add / Pending / Friends) without a
 // second round trip.
 export const searchUsers = asyncHandler(async (req, res) => {
-  const q = (req.query.q || '').trim();
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+
   if (q.length < 2) return res.json({ users: [] });
+  if (q.length > 50) {
+    return res.status(400).json({ message: 'Search query is too long.' });
+  }
+
+  const escapedQuery = escapeRegex(q);
 
   const matches = await User.find({
-    username: { $regex: q, $options: 'i' },
+    username: { $regex: escapedQuery, $options: 'i' },
     _id: { $ne: req.userId },
   })
     .select('username')
@@ -48,6 +55,9 @@ export const searchUsers = asyncHandler(async (req, res) => {
 export const sendRequest = asyncHandler(async (req, res) => {
   const { userId: toUserId } = req.body;
   if (!toUserId) return res.status(400).json({ message: 'A user to add is required.' });
+  if (!mongoose.Types.ObjectId.isValid(toUserId)) {
+    return res.status(400).json({ message: 'Invalid user ID.' });
+  }
   if (String(toUserId) === String(req.userId)) {
     return res.status(400).json({ message: "You can't add yourself as a friend." });
   }

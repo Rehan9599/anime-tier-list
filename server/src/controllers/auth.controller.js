@@ -2,7 +2,8 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-
+const DUMMY_PASSWORD_HASH =
+  '$2b$10$7EqJtq98hPqEX7fNZaFWoO6GJ8fN3c3M9J7r0WmQZ9X6QYQ8v8G6K';
 const signToken = (userId) =>
   jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 
@@ -32,11 +33,22 @@ export const signup = asyncHandler(async (req, res) => {
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
-  const user = await User.findOne({ email }).select('+passwordHash');
-  if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+  if (
+    typeof email !== 'string' ||
+    typeof password !== 'string' ||
+    !email.trim() ||
+    !password
+  ) {
+    return res.status(400).json({
+      message: 'Email and password are required',
+    });
+  }
+  const normalizedEmail = email.trim().toLowerCase();
 
-  const match = await bcrypt.compare(password, user.passwordHash);
-  if (!match) return res.status(401).json({ message: 'Invalid credentials' });
+  const user = await User.findOne({ email: normalizedEmail }).select('+passwordHash');
+  const passwordHash= user?.passwordHash || DUMMY_PASSWORD_HASH;
+  const match = await bcrypt.compare(password, passwordHash);
+  if (!user||!match) return res.status(401).json({ message: 'Invalid credentials' });
 
   const token = signToken(user._id);
   res.cookie('token', token, cookieOptions());

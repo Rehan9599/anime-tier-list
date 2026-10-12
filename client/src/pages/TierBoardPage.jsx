@@ -142,12 +142,13 @@ const TierBoardPage = () => {
   const [saveStatus, setSaveStatus] = useState('saved'); // 'saved' | 'saving'
   const [poolError, setPoolError] = useState('');
   const saveTimeout = useRef(null);
+  const tiersLoadedRef = useRef(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef(null);
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-
+  const [tierListError, setTierListError] = useState('');
   // Closes the filter dropdown on a tap/click anywhere outside it.
   useEffect(() => {
     if (!filterOpen) return;
@@ -312,15 +313,49 @@ const TierBoardPage = () => {
   );
 
   useEffect(() => {
-    if (mode !== 'search' || query.trim().length < 2) return;
-    const t = setTimeout(() => {
+    const normalizedQuery = query.trim();
+    if (mode !== 'search') {setSearchResults([]);return undefined;}
+    if (normalizedQuery.length < 2) {
+      setSearchResults([]);
       setPoolError('');
-      axiosClient
-        .get(`/api/anime/search?q=${encodeURIComponent(query)}`)
-        .then((res) => setSearchResults(res.data.results))
-        .catch((err) => setPoolError(err.response?.data?.message || 'Search failed. Try again.'));
+      return undefined;
+    }
+    const controller = new AbortController();
+    let isCurrentRequest = true;
+
+    const timeoutId = setTimeout(async () => {
+      setPoolError('');
+
+      try {
+        const res = await axiosClient.get(
+          `/api/anime/search?q=${encodeURIComponent(normalizedQuery)}`,
+          { signal: controller.signal }
+        );
+
+        if (isCurrentRequest) {
+          setSearchResults(res.data.results);
+        }
+      } catch (err) {
+        if (
+          err.name === 'CanceledError' ||
+          err.code === 'ERR_CANCELED'
+        ) {
+          return;
+        }
+
+        if (isCurrentRequest) {
+          setPoolError(
+            err.response?.data?.message || 'Search failed. Try again.'
+          );
+        }
+      }
     }, 300);
-    return () => clearTimeout(t);
+
+    return () => {
+      isCurrentRequest = false;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
   }, [mode, query]);
 
   // --- Recommended ---------------------------------------------------------
@@ -343,19 +378,52 @@ const TierBoardPage = () => {
 
   // --- Tier list load / autosave ---------------------------------------
   useEffect(() => {
-    axiosClient.get('/api/tierlist?category=anime').then((res) => {
-      setTiers(res.data.tierList.tiers);
-    });
-  }, []);
+    let mounted = true;
 
+    axiosClient
+      .get('/api/tierlist?category=anime')
+      .then((res) => {
+        if (mounted) {
+          tiersLoadedRef.current = true;
+          setTiers(res.data.tierList.tiers);
+          setTierListError('');
+        }
+      })
+      .catch((err) => {
+        if (mounted) {
+          setTierListError(
+            err.response?.data?.message || 'Could not load your tier list.'
+          );
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+  useEffect(() => {
+    return () => {
+      clearTimeout(saveTimeout.current);
+    };
+  }, []);
   const scheduleSave = useCallback((nextTiers) => {
     setSaveStatus('saving');
     clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(async () => {
-      await axiosClient.put('/api/tierlist', { category: 'anime', tiers: nextTiers });
-      setSaveStatus('saved');
+      try{
+        await axiosClient.put('/api/tierlist', { category: 'anime', tiers: nextTiers });
+        setSaveStatus('saved');
+      }catch(err){
+        console.error("autosave failed",err);
+        setSaveStatus('error');
+      }
     }, 800);
   }, []);
+
+  useEffect(() => {
+    if (!tiersLoadedRef.current) return;
+    scheduleSave(tiers);
+  }, [tiers, scheduleSave]);
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
@@ -397,7 +465,6 @@ const TierBoardPage = () => {
           ...prev,
           [sourceTier]: prev[sourceTier].filter((a) => a.animeId !== activeId),
         };
-        scheduleSave(cleaned);
         return cleaned;
       }
 
@@ -422,7 +489,6 @@ const TierBoardPage = () => {
 
         const nextTierItems = arrayMove(items, oldIndex, newIndex);
         const next = { ...prev, [destTier]: nextTierItems };
-        scheduleSave(next);
         return next;
       }
 
@@ -443,7 +509,6 @@ const TierBoardPage = () => {
         ...cleaned,
         [destTier]: destItems,
       };
-      scheduleSave(next);
       return next;
     });
   };
@@ -477,14 +542,27 @@ const TierBoardPage = () => {
   // check its own status with a Set.has() instead of a network call per tap.
   const [watchedIds, setWatchedIds] = useState(new Set());
   const [watchlistIds, setWatchlistIds] = useState(new Set());
-
+  const [watchStatusError, setWatchStatusError] = useState('');
   const refreshWatchStatus = useCallback(() => {
-    Promise.all([axiosClient.get('/api/watched'), axiosClient.get('/api/watchlist')]).then(
-      ([watchedRes, watchlistRes]) => {
-        setWatchedIds(new Set(watchedRes.data.items.map((i) => i.animeId)));
-        setWatchlistIds(new Set(watchlistRes.data.items.map((i) => i.animeId)));
-      }
-    );
+    return Promise.all([
+      axiosClient.get('/api/watched'),
+      axiosClient.get('/api/watchlist'),
+    ])
+      .then(([watchedRes, watchlistRes]) => {
+        setWatchedIds(
+          new Set(watchedRes.data.items.map((item) => item.animeId))
+        );
+        setWatchlistIds(
+          new Set(watchlistRes.data.items.map((item) => item.animeId))
+        );
+        setWatchStatusError('');
+      })
+      .catch((err) => {
+        setWatchStatusError(
+          err.response?.data?.message ||
+            'Could not load watched and watchlist status.'
+        );
+      });
   }, []);
 
   useEffect(() => {
@@ -651,7 +729,11 @@ const TierBoardPage = () => {
                 )}
 
                 {poolError && <p className="tier-error">{poolError}</p>}
-
+                {watchStatusError && (
+                  <div className="tier-error" role="alert">
+                    {watchStatusError}
+                  </div>
+                )}
                 <DropZone id="pool" className="tier-pool">
                   {mode === 'filter' &&
                     (hasWatchedTag || hasWatchlistTag) &&
@@ -694,7 +776,11 @@ const TierBoardPage = () => {
                       {mode === 'search' && 'Search for any anime title'}
                     </span>
                   </div>
-
+                  {tierListError && (
+                    <div className="tier-error" role="alert">
+                      {tierListError}
+                    </div>
+                  )}
                   <div className="tier-ranking-actions">
                     <div className="tier-email-actions">
                       <input

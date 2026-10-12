@@ -21,6 +21,7 @@ const CardActionOverlay = ({ anime, children }) => {
   const wrapRef = useRef(null);
   const popupRef = useRef(null);
   const closeTimeoutRef = useRef(null);
+  const mountedRef = useRef(true);
 
   const { watchedIds, watchlistIds, refresh } = useWatchStatus();
   const isWatched = watchedIds.has(anime.id);
@@ -38,9 +39,9 @@ const CardActionOverlay = ({ anime, children }) => {
     setMessage('');
   };
 
-  const scheduleClose = () => {
+  const scheduleClose = (delay = CLOSE_GRACE_MS) => {
     cancelClose();
-    closeTimeoutRef.current = setTimeout(closeNow, CLOSE_GRACE_MS);
+    closeTimeoutRef.current = setTimeout(closeNow, delay);
   };
 
   const openPopup = () => {
@@ -69,7 +70,10 @@ const CardActionOverlay = ({ anime, children }) => {
     return () => document.removeEventListener('pointerdown', handleOutside);
   }, [open]);
 
-  useEffect(() => () => cancelClose(), []);
+  useEffect(() => () => {
+    mountedRef.current = false;
+    cancelClose();
+  }, []);
 
   const stop = (e) => e.stopPropagation();
 
@@ -83,12 +87,14 @@ const CardActionOverlay = ({ anime, children }) => {
         watched: true,
         genres: anime.genres || [],
       });
+      if (!mountedRef.current) return;
       setMessage('Marked as watched');
       refresh();
     } catch {
+      if (!mountedRef.current) return;
       setMessage('Could not save.');
     }
-    setTimeout(closeNow, 700);
+    if (mountedRef.current) scheduleClose(700);
   };
 
   const addToWatchlist = async (e) => {
@@ -100,12 +106,14 @@ const CardActionOverlay = ({ anime, children }) => {
         imageUrl: anime.imageUrl,
         genres: anime.genres || [],
       });
+      if (!mountedRef.current) return;
       setMessage('Added to watchlist');
       refresh();
     } catch {
+      if (!mountedRef.current) return;
       setMessage('Could not save.');
     }
-    setTimeout(closeNow, 700);
+    if (mountedRef.current) scheduleClose(700);
   };
 
   const wrapHandlers = supportsHover

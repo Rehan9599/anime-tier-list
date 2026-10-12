@@ -28,7 +28,11 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<DashboardPage />} />
+      <Route path="*" element={
+        <ProtectedRoute>
+          <DashboardPage />
+        </ProtectedRoute>}
+      />
       <Route
         path="/friend/:friendId"
         element={

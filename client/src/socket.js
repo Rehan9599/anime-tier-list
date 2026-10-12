@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 // socket per component (which would multiply connections and messages).
 const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000', {
   withCredentials: true, // sends the httpOnly JWT cookie during the handshake
-  autoConnect: true,
+  autoConnect: false,
 });
 
 export default socket;

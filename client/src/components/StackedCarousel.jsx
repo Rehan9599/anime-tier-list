@@ -1,30 +1,46 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { MdKeyboardArrowUp, MdKeyboardArrowDown } from 'react-icons/md';
 
 const StackedCarousel = ({ title, items = [], renderItem, autoMs = 2200 }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [spinDir, setSpinDir] = useState('down'); // 'down' | 'up'
   const [isSpinning, setIsSpinning] = useState(false);
+  const isSpinningRef = useRef(false);
+  const spinTimeoutRef = useRef(null);
+  
 
-  useEffect(() => {
-    if (items.length <= 1) return;
-    const interval = setInterval(() => {
-      triggerSpin('down');
-    }, autoMs);
-    return () => clearInterval(interval);
-  }, [items.length, autoMs]);
+  const triggerSpin = useCallback((dir = 'down') => {
+    if (items.length <= 1 || isSpinningRef.current) return;
 
-  const triggerSpin = (dir = 'down') => {
-    if (items.length <= 1 || isSpinning) return;
+    isSpinningRef.current = true;
     setSpinDir(dir);
     setIsSpinning(true);
     setCurrentIndex((prev) => {
       if (dir === 'down') return (prev + 1) % items.length;
       return (prev - 1 + items.length) % items.length;
     });
-    setTimeout(() => setIsSpinning(false), 420);
-  };
 
+    clearTimeout(spinTimeoutRef.current);
+    spinTimeoutRef.current = setTimeout(() => {
+      isSpinningRef.current = false;
+      setIsSpinning(false);
+      spinTimeoutRef.current = null;
+    }, 420);
+  }, [items.length]);
+  useEffect(() => {
+    if (items.length <= 1) return;
+    const interval = setInterval(() => {
+      triggerSpin('down');
+    }, autoMs);
+    return () => clearInterval(interval);
+  }, [items.length, autoMs, triggerSpin]);
+  useEffect(() => {
+    return () => {
+      clearTimeout(spinTimeoutRef.current);
+      spinTimeoutRef.current = null;
+      isSpinningRef.current = false;
+    };
+  }, []);
   const handleNext = () => triggerSpin('down');
   const handlePrev = () => triggerSpin('up');
 

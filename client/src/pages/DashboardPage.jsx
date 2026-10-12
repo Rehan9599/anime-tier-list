@@ -27,32 +27,80 @@ const DashboardPage = () => {
   const [friendsTab, setFriendsTab] = useState('friends'); // 'friends' | 'add' | 'requests'
   const [chatFriend, setChatFriend] = useState(null); // null = list view, else = chat thread view
   const [pendingCount, setPendingCount] = useState(0);
-
+  const [dashboardError, setDashboardError] = useState('');
   const [ratedItems, setRatedItems] = useState([]);
   const [trendingItems, setTrendingItems] = useState([]);
   const [highlightItems, setHighlightItems] = useState([]);
 
   const refreshPendingCount = () => {
-    axiosClient.get('/api/friends/requests').then((res) => setPendingCount(res.data.requests.length));
+    return axiosClient
+      .get('/api/friends/requests')
+      .then((res) => {
+        setPendingCount(res.data.requests.length);
+      })
+      .catch((err) => {
+        setDashboardError(
+          err.response?.data?.message || 'Could not load friend requests.'
+        );
+      });
   };
 
   useEffect(() => {
-    axiosClient.get('/api/tierlist?category=anime').then((res) => {
-      const tiers = res.data.tierList.tiers;
-      const flattened = TIER_KEYS.flatMap((t) =>
-        tiers[t].map((a) => ({ id: a.animeId, title: a.title, imageUrl: a.imageUrl, tier: t }))
-      ).filter((a) => a.imageUrl && a.title);
-      setRatedItems(flattened);
-    });
+    const loadDashboardData = async () => {
+      setDashboardError('');
 
-    axiosClient.get('/api/anime/trending').then((res) =>
-      setTrendingItems(res.data.results.filter((a) => a.imageUrl && a.title))
-    );
-    axiosClient.get('/api/anime/top?page=1').then((res) =>
-      setHighlightItems(res.data.results.filter((a) => a.imageUrl && a.title).slice(0, 8))
-    );
+      const results = await Promise.allSettled([
+        axiosClient.get('/api/tierlist?category=anime'),
+        axiosClient.get('/api/anime/trending'),
+        axiosClient.get('/api/anime/top?page=1'),
+        axiosClient.get('/api/friends/requests'),
+      ]);
 
-    refreshPendingCount();
+      const [tierListResult, trendingResult, highlightsResult, requestsResult] = results;
+
+      if (tierListResult.status === 'fulfilled') {
+        const tiers = tierListResult.value.data.tierList.tiers;
+        const flattened = TIER_KEYS.flatMap((t) =>
+          tiers[t]
+            .map((a) => ({
+              id: a.animeId,
+              title: a.title,
+              imageUrl: a.imageUrl,
+              tier: t,
+            }))
+            .filter((a) => a.imageUrl && a.title)
+        );
+        setRatedItems(flattened);
+      }
+
+      if (trendingResult.status === 'fulfilled') {
+        setTrendingItems(
+          trendingResult.value.data.results.filter(
+            (a) => a.imageUrl && a.title
+          )
+        );
+      }
+
+      if (highlightsResult.status === 'fulfilled') {
+        setHighlightItems(
+          highlightsResult.value.data.results
+            .filter((a) => a.imageUrl && a.title)
+            .slice(0, 8)
+        );
+      }
+
+      if (requestsResult.status === 'fulfilled') {
+        setPendingCount(requestsResult.value.data.requests.length);
+      }
+
+      if (results.some((result) => result.status === 'rejected')) {
+        setDashboardError(
+          'Some dashboard data could not be loaded. Please try again.'
+        );
+      }
+    };
+
+    loadDashboardData();
   }, []);
 
   const handleLogout = async () => {
@@ -130,6 +178,11 @@ const DashboardPage = () => {
         </header>
 
         <main className="dash-main-full">
+          {dashboardError && (
+            <div className="tier-error" role="alert">
+              {dashboardError}
+            </div>
+          )}
           <section className="stacked-carousel-section">
             <div className="stacked-carousel-row">
               <StackedCarousel
