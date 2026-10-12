@@ -164,6 +164,7 @@ anime-tier-list/
 | Variable | Purpose |
 |---|---|
 | `MONGO_URI` | MongoDB connection string |
+| `MONGO_DNS_SERVERS` | Optional comma-separated DNS servers used for MongoDB SRV lookup (e.g. `1.1.1.1,8.8.8.8`) |
 | `JWT_SECRET` | Secret key for signing JWT tokens |
 | `JWT_EXPIRES_IN` | Token expiry duration (default: `7d`) |
 | `PORT` | Server port (default: `5000`) |

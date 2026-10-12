@@ -9,7 +9,15 @@ const axiosClient = axios.create({
 // attempt) -- that's handled locally by the form itself. A 401 from anywhere
 // else means the session died (missing/expired JWT cookie), which is what
 // the global handler below is actually for.
-const AUTH_ENDPOINTS = ['/api/auth/login', '/api/auth/signup'];
+// These endpoints intentionally handle authentication state themselves. In
+// particular, /me returns 401 for an expired session and must not trigger the
+// global redirect while AuthContext is determining whether a user is signed in.
+const AUTH_ENDPOINTS = [
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/auth/me',
+  '/api/auth/logout',
+];
 
 // Guards against every simultaneous request that happens to fail at once
 // (e.g. a page that fires several API calls on mount) all showing their own

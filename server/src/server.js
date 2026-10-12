@@ -41,7 +41,12 @@ if (process.env.NODE_ENV !== 'production') app.use(morgan('dev'));
 
 const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
 
-app.use('/api/auth', authLimiter, authRoutes);
+// Session checks are made during every auth bootstrap and are read-only. Rate
+// limit only credential-bearing mutations so an expired session cannot turn
+// normal /me checks into 429 responses.
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/signup', authLimiter);
+app.use('/api/auth', authRoutes);
 app.use('/api/anime', animeRoutes);
 app.use('/api/tierlist', tierlistRoutes);
 app.use('/api/friends', friendsRoutes);

@@ -136,19 +136,19 @@ const DashboardPage = () => {
                 title="Your Rankings"
                 items={ratedItems}
                 renderItem={renderRankedItem}
-                autoMs={2000}
+                autoMs={8000}
               />
               <StackedCarousel
                 title="Trending Now"
                 items={trendingItems}
                 renderItem={renderStandardItem}
-                autoMs={2200}
+                autoMs={7200}
               />
               <StackedCarousel
                 title="Highlights"
                 items={highlightItems}
                 renderItem={renderStandardItem}
-                autoMs={2400}
+                autoMs={7200}
               />
             </div>
           </section>
