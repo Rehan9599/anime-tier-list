@@ -72,16 +72,17 @@
 ```
 anime-tier-list/
 ├── client/                      # React frontend (Vite)
+│   ├── .env.example
 │   ├── index.html
 │   ├── vite.config.js
 │   ├── package.json
 │   └── src/
 │       ├── main.jsx             # React app bootstrap
 │       ├── App.jsx              # Route definitions
-│       ├── index.css            # Global reset
-│       ├── socket.js            # Shared Socket.IO instance
+│       ├── index.css             # Global reset
+│       ├── socket.js             # Shared Socket.IO instance
 │       ├── api/
-│       │   └── axiosClient.js   # Configured Axios + interceptor
+│       │   └── axiosClient.js    # Configured Axios + interceptor
 │       ├── context/
 │       │   ├── AuthContext.jsx      # Auth state (user, login, logout)
 │       │   └── WatchStatusContext.jsx # Watched/Watchlist ID sets
@@ -92,8 +93,9 @@ anime-tier-list/
 │       │   ├── ChatWidget.jsx         # Floating chat widget on friend page
 │       │   ├── FriendsPanel.jsx       # Modal friends panel (tier board)
 │       │   ├── FriendsSidebar.jsx     # Slide-out sidebar (dashboard)
-│       │   ├── PosterRow.jsx          # Horizontal scrolling poster row
+│       │   ├── PosterRow.jsx           # Horizontal scrolling poster row
 │       │   ├── ProtectedRoute.jsx     # Auth guard wrapper
+│       │   ├── StackedCarousel.jsx    # Stacked dashboard carousel
 │       │   ├── SwipeDeck.jsx          # Tinder-style swipe quiz
 │       │   ├── TierDemo.jsx           # Animated demo on signup page
 │       │   └── WatchedPromptGate.jsx  # Once-per-session swipe prompt
@@ -111,6 +113,7 @@ anime-tier-list/
 │           └── franchise.js       # Franchise grouping utility
 │
 └── server/                      # Express backend
+    ├── .env.example
     ├── package.json
     └── src/
         ├── server.js            # App entry point + Socket.IO setup
@@ -221,6 +224,7 @@ anime-tier-list/
 | `jsonwebtoken` | ^9.0.2 | Sign and verify JWT tokens |
 | `bcryptjs` | ^2.4.3 | Password hashing |
 | `cookie-parser` | ^1.4.6 | Parse cookies from incoming requests |
+| `cookie` | ^2.0.1 | Parse Socket.IO handshake cookies |
 | `cors` | ^2.8.5 | CORS headers |
 | `dotenv` | ^16.4.5 | Load `.env` file |
 | `morgan` | ^1.10.0 | HTTP request logger (dev) |
@@ -229,6 +233,7 @@ anime-tier-list/
 | `axios` | ^1.7.7 | External API calls (Jikan, AniList) |
 | `node-cache` | ^5.1.2 | In-memory TTL cache |
 | `nodemailer` | ^6.9.14 | Email sending via SMTP |
+| `express-validator` | ^7.2.0 | Available request-validation library |
 
 ---
 
@@ -248,7 +253,7 @@ Defines all routes via React Router v6.
 | `/tierlist` | `TierBoardPage` | ✅ Yes |
 | `/friend/:friendId` | `FriendTierListPage` | ✅ Yes |
 | `/profile` | `ProfilePage` | ✅ Yes |
-| `*` (catch-all) | `DashboardPage` | No |
+| `*` (catch-all) | `DashboardPage` | ✅ Yes |
 
 ---
 
@@ -263,7 +268,7 @@ Login page. Left side shows marketing copy. Right side is login form.
 ### `pages/DashboardPage.jsx`
 Hub page after login. Shows user's ranked anime, trending anime, and highlights in a coverflow layout. Slide-out sidebar for social/chat.
 
-### `pages/TierBoardPage.jsx` ⭐ (665 lines — largest file)
+### `pages/TierBoardPage.jsx` ⭐ (current main tier-list page)
 The main ranking experience. Drag-and-drop anime cards into S/A/B/C tier rows from browse pool. Auto-saves on change. Supports filter, search, and AI recommendation modes.
 
 ---
@@ -271,7 +276,7 @@ The main ranking experience. Drag-and-drop anime cards into S/A/B/C tier rows fr
 ## 8. Client — Context (Global State)
 
 ### `context/AuthContext.jsx`
-Provides authentication state (`user`, `login`, `signup`, `logout`). The JWT lives in an httpOnly cookie.
+Provides authentication state (`user`, `login`, `signup`, `logout`). The JWT lives in an httpOnly cookie. The Socket.IO client connects after authentication and disconnects on logout.
 
 ### `context/WatchStatusContext.jsx`
 Shares `watchedIds` and `watchlistIds` Sets with all `CardActionOverlay` instances to avoid per-card network calls.
@@ -281,8 +286,9 @@ Shares `watchedIds` and `watchlistIds` Sets with all `CardActionOverlay` instanc
 ## 9. Client — Components
 
 - **`ProtectedRoute.jsx`**: Route guard redirecting to `/login` if unauthenticated.
-- **`CardActionOverlay.jsx`**: Hover/tap popup portal allowing quick "Watched" and "Add to Watchlist" actions.
+- **`CardActionOverlay.jsx`**: Hover/tap popup portal allowing quick "Watched" and "Add to Watchlist" actions. Delayed closes are tracked and cleaned up on unmount.
 - **`Carousel.jsx`**: Auto-advancing image carousel with dot navigation.
+- **`StackedCarousel.jsx`**: Dashboard stacked carousel with guarded, cleaned-up spin timers.
 - **`PosterRow.jsx`**: Horizontal scrollable poster row.
 - **`ChatThread.jsx`**: Full-pane chat view used inside `FriendsSidebar`.
 - **`ChatWidget.jsx`**: Floating minimizable chat widget on friend page.
@@ -297,19 +303,19 @@ Shares `watchedIds` and `watchlistIds` Sets with all `CardActionOverlay` instanc
 ## 10. Client — API Layer & Socket
 
 - **`api/axiosClient.js`**: Configured Axios instance (`withCredentials: true`) with automatic 401 response interceptor for session expiry handling.
-- **`src/socket.js`**: Shared Socket.IO client singleton configured for real-time chat and community tier board sync.
+- **`src/socket.js`**: Shared Socket.IO client singleton configured with `autoConnect: false`; `AuthContext` controls its authenticated lifecycle.
 
 ---
 
 ## 11. Server — Architecture & Mongoose Models
 
 - **`User.js`**: `username`, `email`, `passwordHash` (hidden by default).
-- **`TierList.js`**: `userId`, `category` ('anime'), `tiers` ({ S, A, B, C }).
+- **`TierList.js`**: `userId`, `category` (`'anime'`), `tiers` (`{ S, A, B, C }`), with validation and a unique user/category index.
 - **`FriendRequest.js`**: `from`, `to`. Unique index on `(from, to)`.
 - **`Friendship.js`**: `userA`, `userB` (normalized lexicographically via `orderPair()`).
 - **`Message.js`**: `conversationId`, `from`, `text`.
 - **`WatchedStatus.js`**: `userId`, `animeId`, `watched` (boolean).
-- **`Watchlist.js`**: `userId`, `animeId`, `title`, `imageUrl`, `genres`.
+- **`Watchlist.js`**: `userId`, numeric `animeId`, `title`, `imageUrl`, `genres`, with a unique user/anime index.
 - **`CommunitySession.js`**: `roomCode` (6 chars), `category`, `participants`, `tiers`.
 
 ---
@@ -320,7 +326,7 @@ Shares `watchedIds` and `watchlistIds` Sets with all `CardActionOverlay` instanc
 Primary external anime data provider. Intercepts calls, caches in memory via `node-cache`, retries failed requests, and falls back to AniList GraphQL API if Jikan experiences outages.
 
 ### `services/email.service.js`
-Nodemailer SMTP integration for sending formatted HTML tier list summaries to friends.
+Nodemailer SMTP integration for sending formatted HTML tier list summaries to friends. Usernames and tier titles are escaped before being inserted into HTML.
 
 ### `services/recommend.service.js`
 Content-based recommendation engine. Uses one-hot genre feature vectors + score dimension, builds a weighted taste profile from S/A tier picks, and computes cosine similarity against candidate anime (k-NN).
@@ -329,14 +335,14 @@ Content-based recommendation engine. Uses one-hot genre feature vectors + score 
 
 ## 13. Server — Controllers & API Routes
 
-- **`auth.controller.js`**: Signup, login (sets httpOnly cookie), logout, getMe.
+- **`auth.controller.js`**: Signup, login (sets httpOnly cookie), logout, getMe. Login validates required fields and uses a dummy password hash for timing consistency when the email is unknown.
 - **`anime.controller.js`**: Top anime, title search, trending anime, genre list, by-genre query.
-- **`tierlist.controller.js`**: Get tier list, autosave tier list, email export, get recommendations, friend tier list.
-- **`friends.controller.js`**: User search with status annotation, send request, list requests, respond to request, list friends.
-- **`chat.controller.js`**: Fetch 1:1 message history.
+- **`tierlist.controller.js`**: Get tier list, validated autosave tier list, email export, get recommendations, friend tier list. Read operations return empty tiers without creating documents.
+- **`friends.controller.js`**: User search with escaped regex input, status annotation, send request, list requests, respond to request, list friends.
+- **`chat.controller.js`**: Fetch the newest 200 1:1 messages by sorting newest-first, then reversing for display.
 - **`community.controller.js`**: Create and fetch shared tier list sessions.
-- **`watched.controller.js`**: Get quiz prompt, submit watch status, list watched.
-- **`watchlist.controller.js`**: Add, list, and remove from watchlist.
+- **`watched.controller.js`**: Get quiz prompt, submit watch status, list watched. Prompt pages are fetched in bounded concurrent batches.
+- **`watchlist.controller.js`**: Add, list, and remove from watchlist with numeric ID validation and not-found handling.
 
 ---
 
@@ -346,8 +352,78 @@ Content-based recommendation engine. Uses one-hot genre feature vectors + score 
 2. **Jikan -> AniList Fallback**: Automatic failover to AniList GraphQL when Jikan is down.
 3. **`orderPair()` Normalization**: Lexicographical pair sorting ensures symmetric 1:1 friendships and chat rooms.
 4. **Server-Authoritative Real-Time Chat**: Messages persisted to MongoDB before broadcasting via Socket.IO.
-5. **Debounced Autosave**: Tier lists save state 800ms after user stops dragging.
+5. **Debounced Autosave**: Tier lists save committed state 800ms after user stops dragging; the save is no longer performed inside the React state updater.
 6. **Content-Based Cosine Similarity**: Recommends anime based on mathematical vector alignment of user's favorite genres.
+7. **Read-only Reads**: Missing tier lists are represented by empty tiers rather than being created by GET requests.
+
+---
+
+## Current Repository Corrections
+
+This section is an additive correction to the original documentation above.
+
+### Local commands
+
+```powershell
+# server
+cd server
+Copy-Item .env.example .env
+npm install
+npm run dev
+
+# client, in a second terminal
+cd client
+Copy-Item .env.example .env
+npm install
+npm run dev
+```
+
+The default server URL is `http://localhost:5000`; the default Vite client URL
+is `http://localhost:5173`.
+
+### Current security and audit status
+
+The audit checklist in `docs/BUG-FIX-CHECKLIST.md` records BUG-01 through
+BUG-15 and SEC-01 through SEC-06 as complete. The following protections are
+currently present:
+
+- Invalid MongoDB ObjectIds are rejected before controller queries.
+- Tier-list payloads are validated for structure, IDs, duplicates, sizes, and
+  supported tiers.
+- Search input is escaped before use in MongoDB regular expressions.
+- Email usernames and tier titles are HTML-escaped.
+- Login validates missing fields and uses a dummy bcrypt hash for unknown users.
+- Credential endpoints are rate limited and the server trusts one proxy hop.
+- Socket.IO uses a direct `cookie` dependency and manual handshake-cookie
+  parsing.
+- The catch-all client route is protected.
+
+### Remaining DAT-01 limitation
+
+`TierBoardPage.jsx` now has autosave failure handling, clears its debounce timer
+on unmount, and saves from an effect after committed state changes. DAT-01 is
+still open because the implementation does not yet flush a pending save on
+tab close/navigation or retry a failed save request.
+
+### Current API surface
+
+The server mounts these routers under `/api`:
+
+| Prefix | Scope |
+|---|---|
+| `/api/auth` | Signup, login, logout, and current-user lookup |
+| `/api/anime` | Top anime, search, trending, genres, and genre-filtered results |
+| `/api/tierlist` | Own/friend tier lists, autosave, email export, and recommendations |
+| `/api/friends` | User search, friend requests, and friend lists |
+| `/api/chat` | Direct-message history |
+| `/api/community` | Shared tier-list sessions |
+| `/api/watched` | Watched status and quiz prompts |
+| `/api/watchlist` | Watchlist CRUD |
+
+`GET /api/health` reports server health. JSON request bodies are limited to
+`100kb`, and login/signup routes are rate limited. Socket.IO handles
+authenticated real-time chat and community synchronization; its handshake JWT
+is read from the httpOnly cookie.
 
 ---
 
