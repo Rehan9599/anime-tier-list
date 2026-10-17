@@ -37,6 +37,22 @@ const animeItemSchema = new mongoose.Schema(
         message: 'An anime item cannot have more than 30 genres',
       },
     },
+    year: {
+      type: Number,
+      min: 1980,
+      max: () => new Date().getFullYear(),
+      default: null,
+    },
+    season: {
+      type: String,
+      enum: ['WINTER', 'SPRING', 'SUMMER', 'FALL', null],
+      default: null,
+    },
+    format: {
+      type: String,
+      enum: ['TV', 'MOVIE', 'TV_SHORT', 'SPECIAL', 'OVA', 'ONA', 'MUSIC', null],
+      default: null,
+    },
     score: {
       type: Number,
       default: null,
