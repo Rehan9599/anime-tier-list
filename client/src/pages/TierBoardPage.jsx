@@ -34,6 +34,27 @@ const cardScale = (count) => {
   return Math.max(MIN_CARD_SCALE, COMFORTABLE_TIER_COUNT / count);
 };
 
+const FILTER_SEASONS = [
+  { value: 'WINTER', label: 'Winter' },
+  { value: 'SPRING', label: 'Spring' },
+  { value: 'SUMMER', label: 'Summer' },
+  { value: 'FALL', label: 'Fall' },
+];
+
+const FILTER_FORMATS = [
+  { value: 'TV', label: 'TV Show' },
+  { value: 'MOVIE', label: 'Movie' },
+  { value: 'TV_SHORT', label: 'TV Short' },
+  { value: 'SPECIAL', label: 'Special' },
+  { value: 'OVA', label: 'OVA' },
+  { value: 'ONA', label: 'ONA' },
+  { value: 'MUSIC', label: 'Music' },
+];
+
+const FILTER_YEARS = Array.from(
+  { length: new Date().getFullYear() - 1980 + 1 },
+  (_, index) => new Date().getFullYear() - index
+);
 // Kept in sync with GENRE_MAP in server/src/controllers/anime.controller.js.
 const GENRES = [
   { key: 'action', label: 'Action' },
@@ -174,6 +195,9 @@ const TierBoardPage = () => {
   // --- Filter: Top-N size + combinable tags (genres, Watched, Watchlist) ---
   const [limit, setLimit] = useState(20);
   const [selectedTags, setSelectedTags] = useState(new Set());
+  const [selectedYear, setSelectedYear] = useState('');
+  const [selectedSeason, setSelectedSeason] = useState('');
+  const [selectedFormat, setSelectedFormat] = useState('');
 
   const toggleTag = (tag) => {
     setSelectedTags((prev) => {
@@ -184,6 +208,11 @@ const TierBoardPage = () => {
     });
   };
 
+  const activateFilterMode = () => {
+  setMode('filter');
+  setFilterOpen(true);
+};
+
   // Stable-ordered (insertion order, which Sets guarantee) list of selected
   // genre tags, separate from the special 'watched'/'watchlist' tags.
   const genreTags = useMemo(() => [...selectedTags].filter((t) => GENRE_KEYS.has(t)), [selectedTags]);
@@ -193,14 +222,44 @@ const TierBoardPage = () => {
   // Every result -- regardless of which source it came from -- passes
   // through this before being shown, so combining tags always means AND
   // (must match every selected genre), not OR.
-  const matchesAllGenres = useCallback(
-    (anime) => {
-      if (genreTags.length === 0) return true;
-      const animeGenres = (anime.genres || []).map((g) => g.toLowerCase());
-      return genreTags.every((g) => animeGenres.includes(g));
-    },
-    [genreTags]
-  );
+  const matchesSelectedFilters = useCallback(
+  (anime) => {
+    const animeGenres = (anime.genres || []).map((genre) =>
+      genre.toLowerCase()
+    );
+
+    if (
+      genreTags.length > 0 &&
+      !genreTags.every((genre) => animeGenres.includes(genre))
+    ) {
+      return false;
+    }
+
+    if (
+      selectedYear &&
+      Number(anime.year) !== Number(selectedYear)
+    ) {
+      return false;
+    }
+
+    if (
+      selectedSeason &&
+      anime.season !== selectedSeason
+    ) {
+      return false;
+    }
+
+    if (
+      selectedFormat &&
+      anime.format !== selectedFormat
+    ) {
+      return false;
+    }
+
+    return true;
+  },
+  [genreTags, selectedYear, selectedSeason, selectedFormat]
+);
 
   const filterLabel = () => {
     if (mode !== 'filter') return 'Filter';
@@ -230,7 +289,15 @@ const TierBoardPage = () => {
           res.data.items.forEach((i) => {
             if (!seen.has(i.animeId)) {
               seen.add(i.animeId);
-              merged.push({ id: i.animeId, title: i.title, imageUrl: i.imageUrl, genres: i.genres || [] });
+              merged.push({
+                id: i.animeId,
+                title: i.title,
+                imageUrl: i.imageUrl,
+                genres: i.genres || [],
+                year: i.year ?? null,
+                season: i.season || null,
+                format: i.format || null,
+              });
             }
           });
         });
@@ -240,8 +307,8 @@ const TierBoardPage = () => {
   }, [mode, hasWatchedTag, hasWatchlistTag]);
 
   const visiblePersonal = useMemo(
-    () => personalItems.filter((a) => !placedIds.has(a.id) && matchesAllGenres(a)),
-    [personalItems, placedIds, matchesAllGenres]
+    () => personalItems.filter((a) => !placedIds.has(a.id) && matchesSelectedFilters(a)),
+    [personalItems, placedIds, matchesSelectedFilters]
   );
 
   // --- Browse source: Top-N or genre-anchored, paginated with backfill ----
@@ -252,37 +319,81 @@ const TierBoardPage = () => {
   const [browseHasNextPage, setBrowseHasNextPage] = useState(true);
   const [browseLoading, setBrowseLoading] = useState(false);
   const browseLoadingRef = useRef(false);
+  const browseRequestIdRef = useRef(0);
 
   // Resets pagination only when the PRIMARY genre changes (or toggles
   // on/off) -- adding a second genre tag on top of an unchanged primary
   // just narrows the client-side filter further, it doesn't need a refetch.
   useEffect(() => {
+    browseRequestIdRef.current += 1;
+    browseLoadingRef.current = false;
+
     setBrowsePages([]);
     setBrowsePageCursor(1);
     setBrowseHasNextPage(true);
-  }, [primaryGenre]);
+    setBrowseLoading(false);
+  }, [
+    primaryGenre,
+    selectedYear,
+    selectedSeason,
+    selectedFormat,
+  ]);
 
   const visibleBrowseGroups = useMemo(() => {
-    const unplaced = browsePages.filter((a) => !placedIds.has(a.id) && matchesAllGenres(a));
+    const unplaced = browsePages.filter((a) => !placedIds.has(a.id) && matchesSelectedFilters(a));
     return groupByFranchise(unplaced).slice(0, limit);
-  }, [browsePages, placedIds, matchesAllGenres, limit]);
+  }, [browsePages, placedIds, matchesSelectedFilters, limit]);
 
   useEffect(() => {
-    if (mode !== 'filter' || hasWatchedTag || hasWatchlistTag) return;
-    if (visibleBrowseGroups.length >= limit) return;
-    if (!browseHasNextPage || browseLoadingRef.current) return;
-    if (browsePageCursor > 8) return;
+    if (mode !== 'filter' || hasWatchedTag || hasWatchlistTag) {
+      return undefined;
+    }
+
+    if (visibleBrowseGroups.length >= limit) {
+      return undefined;
+    }
+
+    if (!browseHasNextPage || browseLoadingRef.current) {
+      return undefined;
+    }
+
+    if (browsePageCursor > 8) {
+      return undefined;
+    }
+
+    const requestId = browseRequestIdRef.current;
+    const controller = new AbortController();
 
     browseLoadingRef.current = true;
     setBrowseLoading(true);
 
-    const url = primaryGenre
-      ? `/api/anime/genre?genre=${encodeURIComponent(primaryGenre)}&page=${browsePageCursor}`
-      : `/api/anime/top?page=${browsePageCursor}`;
+    const params = new URLSearchParams({
+      page: String(browsePageCursor),
+    });
+
+    if (primaryGenre) {
+      params.set('genre', primaryGenre);
+    }
+
+    if (selectedYear) {
+      params.set('year', selectedYear);
+    }
+
+    if (selectedSeason) {
+      params.set('season', selectedSeason);
+    }
+
+    if (selectedFormat) {
+      params.set('format', selectedFormat);
+    }
+
+    const url = `/api/anime/top?${params.toString()}`;
 
     axiosClient
-      .get(url)
+      .get(url, { signal: controller.signal })
       .then((res) => {
+        if (requestId !== browseRequestIdRef.current) return;
+
         setPoolError('');
         setBrowsePages((prev) => {
           const seen = new Set(prev.map((a) => a.id));
@@ -296,14 +407,42 @@ const TierBoardPage = () => {
         setBrowsePageCursor((p) => p + 1);
       })
       .catch((err) => {
+        if (
+          err.name === 'CanceledError' ||
+          err.code === 'ERR_CANCELED' ||
+          err.name === 'AbortError'
+        ) {
+          return;
+        }
+
+        if (requestId !== browseRequestIdRef.current) return;
+
         setPoolError(err.response?.data?.message || 'Could not load anime right now.');
         setBrowseHasNextPage(false);
       })
       .finally(() => {
-        browseLoadingRef.current = false;
-        setBrowseLoading(false);
+        if (requestId === browseRequestIdRef.current) {
+          browseLoadingRef.current = false;
+          setBrowseLoading(false);
+        }
       });
-  }, [mode, hasWatchedTag, hasWatchlistTag, visibleBrowseGroups.length, limit, browseHasNextPage, browsePageCursor, primaryGenre]);
+
+    return () => {
+      controller.abort();
+    };
+  }, [
+    mode,
+    hasWatchedTag,
+    hasWatchlistTag,
+    visibleBrowseGroups.length,
+    limit,
+    browseHasNextPage,
+    browsePageCursor,
+    primaryGenre,
+    selectedYear,
+    selectedSeason,
+    selectedFormat,
+  ]);
 
   // --- Search ---------------------------------------------------------
   const [searchResults, setSearchResults] = useState([]);
@@ -476,6 +615,9 @@ const TierBoardPage = () => {
         imageUrl: activeAnime.imageUrl,
         genres: activeAnime.genres || [],
         score: activeAnime.score ?? null,
+        year: activeAnime.year ?? null,
+        season: activeAnime.season ?? null,
+        format: activeAnime.format ?? null,
       };
 
       if (sourceTier === destTier) {
@@ -627,12 +769,20 @@ const TierBoardPage = () => {
                       onClick={() => setFilterOpen((o) => !o)}
                       className={`tier-control tier-filter-btn ${mode === 'filter' ? 'is-active' : ''}`}
                     >
-                      {filterLabel()}
+                      Filter
                       <MdExpandMore size={16} />
                     </button>
 
                     {filterOpen && (
                       <div className="tier-filter-dropdown">
+                        <button
+                          type="button"
+                          className="card-action-close"
+                          onClick={() => setFilterOpen(false)}
+                          aria-label="Close"
+                        >
+                          <MdClose size={16} />
+                        </button>
                         <div className="tier-filter-section">
                           <span className="tier-filter-heading">Show</span>
                           <div className="tier-filter-subtags">
@@ -690,10 +840,108 @@ const TierBoardPage = () => {
                             ))}
                           </div>
                         </div>
+
+                        <div className="tier-filter-section">
+                          <span className="tier-filter-heading">Year</span>
+                          <div className="tier-filter-subtags">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedYear('');
+                                activateFilterMode();
+                              }}
+                              className={`tier-control tier-control--sub ${
+                                !selectedYear ? 'is-active' : ''
+                              }`}
+                            >
+                              Any
+                            </button>
+                            {FILTER_YEARS.map((year) => (
+                              <button
+                                key={year}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedYear(String(year));
+                                  activateFilterMode();
+                                }}
+                                className={`tier-control tier-control--sub ${
+                                  selectedYear === String(year) ? 'is-active' : ''
+                                }`}
+                              >
+                                {year}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="tier-filter-section">
+                          <span className="tier-filter-heading">Season</span>
+                          <div className="tier-filter-subtags">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedSeason('');
+                                activateFilterMode();
+                              }}
+                              className={`tier-control tier-control--sub ${
+                                !selectedSeason ? 'is-active' : ''
+                              }`}
+                            >
+                              Any
+                            </button>
+                            {FILTER_SEASONS.map((season) => (
+                              <button
+                                key={season.value}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSeason(season.value);
+                                  activateFilterMode();
+                                }}
+                                className={`tier-control tier-control--sub ${
+                                  selectedSeason === season.value ? 'is-active' : ''
+                                }`}
+                              >
+                                {season.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="tier-filter-section">
+                          <span className="tier-filter-heading">Format</span>
+                          <div className="tier-filter-subtags">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedFormat('');
+                                activateFilterMode();
+                              }}
+                              className={`tier-control tier-control--sub ${
+                                !selectedFormat ? 'is-active' : ''
+                              }`}
+                            >
+                              Any
+                            </button>
+                            {FILTER_FORMATS.map((format) => (
+                              <button
+                                key={format.value}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedFormat(format.value);
+                                  activateFilterMode();
+                                }}
+                                className={`tier-control tier-control--sub ${
+                                  selectedFormat === format.value ? 'is-active' : ''
+                                }`}
+                              >
+                                {format.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
-
                   <button
                     type="button"
                     onClick={() => {
@@ -725,7 +973,7 @@ const TierBoardPage = () => {
                   />
                 )}
                 {mode === 'recommend' && basedOnGenres.length > 0 && (
-                  <p className="tier-muted">Based on your S/A picks: {basedOnGenres.join(', ')}</p>
+                  <p className="tier-muted">based on your history{basedOnGenres.join(', ')}</p>
                 )}
 
                 {poolError && <p className="tier-error">{poolError}</p>}
@@ -770,11 +1018,11 @@ const TierBoardPage = () => {
                   <div className="tier-ranking-copy">
                     <p className="tier-ranking-kicker">Tier ranking</p>
                     <h2 className="tier-ranking-title">Arrange the lineup</h2>
-                    <span className="tier-muted tier-ranking-subtitle">
+                    {/* <span className="tier-muted tier-ranking-subtitle">
                       {mode === 'filter' && `Browsing: ${filterLabel()}`}
                       {mode === 'recommend' && 'Picked based on your S/A tier'}
                       {mode === 'search' && 'Search for any anime title'}
-                    </span>
+                    </span> */}
                   </div>
                   {tierListError && (
                     <div className="tier-error" role="alert">
@@ -813,7 +1061,16 @@ const TierBoardPage = () => {
                             {tiers[t].map((anime) => (
                               <CardActionOverlay
                                 key={anime.animeId}
-                                anime={{ id: anime.animeId, title: anime.title, imageUrl: anime.imageUrl, genres: anime.genres || [] }}
+                                anime={{
+                                  id: anime.animeId,
+                                  title: anime.title,
+                                  imageUrl: anime.imageUrl,
+                                  genres: anime.genres || [],
+                                  score: anime.score ?? null,
+                                  year: anime.year ?? null,
+                                  season: anime.season ?? null,
+                                  format: anime.format ?? null,
+                                }}
                               >
                                 <SortableCard
                                   anime={anime}

@@ -63,6 +63,33 @@ const validateTiers = (tiers) => {
           return `${tierName} tier contains invalid genres`;
         }
       }
+      if (
+        item.year !== undefined &&
+        item.year !== null &&
+        (
+          !Number.isInteger(item.year) ||
+          item.year < 1980 ||
+          item.year > new Date().getFullYear()
+        )
+      ) {
+        return `${tierName} tier contains an invalid year`;
+      }
+
+      if (
+        item.season !== undefined &&
+        item.season !== null &&
+        !['WINTER', 'SPRING', 'SUMMER', 'FALL'].includes(item.season)
+      ) {
+        return `${tierName} tier contains an invalid season`;
+      }
+
+      if (
+        item.format !== undefined &&
+        item.format !== null &&
+        !['TV', 'MOVIE', 'TV_SHORT', 'SPECIAL', 'OVA', 'ONA', 'MUSIC'].includes(item.format)
+      ) {
+        return `${tierName} tier contains an invalid format`;
+      }
 
       if (
         item.score !== undefined &&

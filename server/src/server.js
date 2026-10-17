@@ -27,7 +27,7 @@ import watchlistRoutes from './routes/watchlist.routes.js';
 // ...
 
 // Node defaults to trying IPv6 first for DNS lookups. On networks with
-// broken/slow IPv6 routing this makes outbound calls (e.g. to Jikan) hang
+// broken/slow IPv6 routing this makes outbound API calls hang
 // until they time out, even though curl -- which resolves IPv4 first --
 // connects fine. Forcing IPv4-first here fixes that class of failure.
 dns.setDefaultResultOrder('ipv4first');
@@ -176,10 +176,9 @@ io.on('connection', (socket) => {
 
 connectDB().then(() => {
   httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-  // Warm the cache immediately so the first real request doesn't wait on
-  // a live Jikan/AniList round trip, then keep it warm just under the
-  // 1-hour cache TTL so it never fully goes cold during normal use.
+  
+// Warm the AniList cache immediately so the first real request does not wait
+// on a live GraphQL round trip
   warmTopAnimeCache();
   setInterval(warmTopAnimeCache, 50 * 60 * 1000);
 });

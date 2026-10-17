@@ -86,6 +86,9 @@ const CardActionOverlay = ({ anime, children }) => {
         imageUrl: anime.imageUrl,
         watched: true,
         genres: anime.genres || [],
+        year: anime.year ?? null,
+        season: anime.season ?? null,
+        format: anime.format ?? null,
       });
       if (!mountedRef.current) return;
       setMessage('Marked as watched');
@@ -105,6 +108,9 @@ const CardActionOverlay = ({ anime, children }) => {
         title: anime.title,
         imageUrl: anime.imageUrl,
         genres: anime.genres || [],
+        year: anime.year ?? null,
+        season: anime.season ?? null,
+        format: anime.format ?? null,
       });
       if (!mountedRef.current) return;
       setMessage('Added to watchlist');

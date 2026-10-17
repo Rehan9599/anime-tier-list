@@ -1,10 +1,24 @@
 import { getTopAnime, searchAnime, getTrendingAnime, getAnimeByGenre } from '../services/jikan.service.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
- 
+
+const getAnimeFilters = (req) => ({
+  genre: req.query.genre?.toLowerCase().trim() || undefined,
+  year: req.query.year,
+  season: req.query.season?.toUpperCase() || undefined,
+  format: req.query.format?.toUpperCase() || undefined,
+});
+
 export const top = asyncHandler(async (req, res) => {
-  const page = Math.max(parseInt(req.query.page) || 1, 1);
-  const { results, hasNextPage } = await getTopAnime(page);
-  res.json({ results, hasNextPage, page });
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const filters = getAnimeFilters(req);
+
+  const { results, hasNextPage } = await getTopAnime(page, filters);
+
+  res.json({
+    results,
+    hasNextPage,
+    page,
+  });
 });
  
 export const search = asyncHandler(async (req, res) => {
@@ -19,10 +33,7 @@ export const trending = asyncHandler(async (req, res) => {
   res.json({ results });
 });
  
-// Standard MAL genre taxonomy IDs, used for the Jikan-primary lookup.
-// AniList's fallback uses the plain genre name string instead of an ID,
-// so even if one of these IDs is subtly wrong, the fallback still works
-// correctly -- this degrades gracefully rather than breaking silently.
+// Keep the supported genre list in one place for the frontend.
 const GENRE_MAP = {
   action: 1,
   adventure: 2,
@@ -44,13 +55,28 @@ export const genreList = (req, res) => {
  
 export const byGenre = asyncHandler(async (req, res) => {
   const genre = (req.query.genre || '').toLowerCase().trim();
-  const page = Math.max(parseInt(req.query.page) || 1, 1);
-  const jikanGenreId = GENRE_MAP[genre];
- 
-  if (!jikanGenreId) {
-    return res.status(400).json({ message: 'Unknown or missing genre.' });
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+
+  if (!genre) {
+    return res.status(400).json({
+      message: 'Unknown or missing genre.',
+    });
   }
- 
-  const { results, hasNextPage } = await getAnimeByGenre(genre, jikanGenreId, page);
-  res.json({ results, hasNextPage, page });
+
+  const { results, hasNextPage } = await getAnimeByGenre(
+    genre,
+    undefined,
+    page,
+    {
+      year: req.query.year,
+      season: req.query.season?.toUpperCase(),
+      format: req.query.format?.toUpperCase(),
+    }
+  );
+
+  res.json({
+    results,
+    hasNextPage,
+    page,
+  });
 });

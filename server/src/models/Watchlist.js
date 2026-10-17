@@ -7,6 +7,22 @@ const watchlistSchema = new mongoose.Schema(
     title: { type: String, required: true },
     imageUrl: { type: String },
     genres: { type: [String], default: [] },
+    year: {
+      type: Number,
+      min: 1980,
+      max: () => new Date().getFullYear(),
+      default: null,
+    },
+    season: {
+      type: String,
+      enum: ['WINTER', 'SPRING', 'SUMMER', 'FALL', null],
+      default: null,
+    },
+    format: {
+      type: String,
+      enum: ['TV', 'MOVIE', 'TV_SHORT', 'SPECIAL', 'OVA', 'ONA', 'MUSIC', null],
+      default: null,
+    },
   },
   { timestamps: true }
 );
